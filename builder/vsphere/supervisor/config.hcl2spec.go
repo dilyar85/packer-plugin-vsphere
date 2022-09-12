@@ -69,9 +69,9 @@ type FlatConfig struct {
 	WinRMUseNTLM              *bool             `mapstructure:"winrm_use_ntlm" cty:"winrm_use_ntlm" hcl:"winrm_use_ntlm"`
 	KubeconfigPath            *string           `mapstructure:"kubeconfig_path" cty:"kubeconfig_path" hcl:"kubeconfig_path"`
 	K8sNamespace              *string           `mapstructure:"k8s_namespace" cty:"k8s_namespace" hcl:"k8s_namespace"`
-	ImageName                 *string           `mapstructure:"image_name" cty:"image_name" hcl:"image_name"`
-	ClassName                 *string           `mapstructure:"class_name" cty:"class_name" hcl:"class_name"`
-	StorageClass              *string           `mapstructure:"storage_class" cty:"storage_class" hcl:"storage_class"`
+	ImageName                 *string           `mapstructure:"image_name" required:"true" cty:"image_name" hcl:"image_name"`
+	ClassName                 *string           `mapstructure:"class_name" required:"true" cty:"class_name" hcl:"class_name"`
+	StorageClass              *string           `mapstructure:"storage_class" required:"true" cty:"storage_class" hcl:"storage_class"`
 	SourceName                *string           `mapstructure:"source_name" cty:"source_name" hcl:"source_name"`
 	NetworkType               *string           `mapstructure:"network_type" cty:"network_type" hcl:"network_type"`
 	NetworkName               *string           `mapstructure:"network_name" cty:"network_name" hcl:"network_name"`

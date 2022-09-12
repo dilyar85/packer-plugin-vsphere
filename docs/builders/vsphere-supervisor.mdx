@@ -1,0 +1,195 @@
+---
+modeline: |
+  vim: set ft=pandoc:
+description: >
+  The Packer builder that deploys a VM-Service vm to a connected vSphere Supervisor cluster.
+page_title: vSphere Supervisor - Builders
+sidebar_title: Supervisor
+---
+
+# VMware vSphere Supervisor Builder
+
+Type: `vsphere-supervisor`
+Artifact BuilderId: `jetbrains.vsphere`
+
+This builder deploys VMs to a connected vSphere Supervisor cluster.
+
+
+
+## Examples
+
+See provided template file in the [examples/supervisor folder](https://github.com/hashicorp/packer-plugin-vsphere/tree/main/builder/vsphere/examples/supervisor).
+
+## Configuration Reference
+There are many configuration options available for each step in this builder. The _required_ items are listed below as well as the _optional_ configuration further down the page.
+
+### Required
+
+<!-- Code generated from the comments of the CreateSourceConfig struct in builder/vsphere/supervisor/step_create_source.go; DO NOT EDIT MANUALLY -->
+
+- `image_name` (string) - Name of the the content library image to deploy the source VM.
+
+- `class_name` (string) - Name of the VM class that describes the virtual hardware settings of the source VM.
+
+- `storage_class` (string) - Name of the storage class that configures storage-related attributes of the source VM.
+
+<!-- End of code generated from the comments of the CreateSourceConfig struct in builder/vsphere/supervisor/step_create_source.go; -->
+
+
+### Optional
+
+#### K8s Connection
+
+<!-- Code generated from the comments of the ConnectK8sConfig struct in builder/vsphere/supervisor/step_connect_k8s.go; DO NOT EDIT MANUALLY -->
+
+- `kubeconfig_path` (string) - The path to kubeconfig file for accessing to the vSphere Supervisor cluster. Defaults to `KUBECONFIG` env var value if set or K8s's `RecommendedHomeFile`.
+
+- `k8s_namespace` (string) - The namespace to deploy the source VM. Defaults to the namespace of the current context in the kubeconfig file.
+
+<!-- End of code generated from the comments of the ConnectK8sConfig struct in builder/vsphere/supervisor/step_connect_k8s.go; -->
+
+
+#### Source VM Creation
+
+<!-- Code generated from the comments of the CreateSourceConfig struct in builder/vsphere/supervisor/step_create_source.go; DO NOT EDIT MANUALLY -->
+
+- `source_name` (string) - Name of the source VM. Defaults to `packer-supervisor-built-source`.
+
+- `network_type` (string) - Name of the network type to attach to the source VM's network interface.
+
+- `network_name` (string) - Name of the network to attach to the source VM's network interface.
+
+- `keep_source` (bool) - Keep all created source object once the builder is done. Defaults to `false`.
+
+<!-- End of code generated from the comments of the CreateSourceConfig struct in builder/vsphere/supervisor/step_create_source.go; -->
+
+
+#### Source VM Watch
+
+<!-- Code generated from the comments of the WatchSourceConfig struct in builder/vsphere/supervisor/step_watch_source.go; DO NOT EDIT MANUALLY -->
+
+- `watch_source_timeout_sec` (int64) - The timeout in seconds to wait for the source VM to be ready. Defaults to `600`.
+
+<!-- End of code generated from the comments of the WatchSourceConfig struct in builder/vsphere/supervisor/step_watch_source.go; -->
+
+
+
+#### Communicator Configuration
+
+<!-- Code generated from the comments of the SSH struct in communicator/config.go; DO NOT EDIT MANUALLY -->
+
+- `ssh_host` (string) - The address to SSH to. This usually is automatically configured by the
+  builder.
+
+- `ssh_port` (int) - The port to connect to SSH. This defaults to `22`.
+
+- `ssh_username` (string) - The username to connect to SSH with. Required if using SSH.
+
+- `ssh_password` (string) - A plaintext password to use to authenticate with SSH.
+
+- `ssh_ciphers` ([]string) - This overrides the value of ciphers supported by default by golang.
+  The default value is [
+    "aes128-gcm@openssh.com",
+    "chacha20-poly1305@openssh.com",
+    "aes128-ctr", "aes192-ctr", "aes256-ctr",
+  ]
+  
+  Valid options for ciphers include:
+  "aes128-ctr", "aes192-ctr", "aes256-ctr", "aes128-gcm@openssh.com",
+  "chacha20-poly1305@openssh.com",
+  "arcfour256", "arcfour128", "arcfour", "aes128-cbc", "3des-cbc",
+
+- `ssh_clear_authorized_keys` (bool) - If true, Packer will attempt to remove its temporary key from
+  `~/.ssh/authorized_keys` and `/root/.ssh/authorized_keys`. This is a
+  mostly cosmetic option, since Packer will delete the temporary private
+  key from the host system regardless of whether this is set to true
+  (unless the user has set the `-debug` flag). Defaults to "false";
+  currently only works on guests with `sed` installed.
+
+- `ssh_key_exchange_algorithms` ([]string) - If set, Packer will override the value of key exchange (kex) altorighms
+  supported by default by golang. Acceptable values include:
+  "curve25519-sha256@libssh.org", "ecdh-sha2-nistp256",
+  "ecdh-sha2-nistp384", "ecdh-sha2-nistp521",
+  "diffie-hellman-group14-sha1", and "diffie-hellman-group1-sha1".
+
+- `ssh_certificate_file` (string) - Path to user certificate used to authenticate with SSH.
+  The `~` can be used in path and will be expanded to the
+  home directory of current user.
+
+- `ssh_pty` (bool) - If `true`, a PTY will be requested for the SSH connection. This defaults
+  to `false`.
+
+- `ssh_timeout` (duration string | ex: "1h5m2s") - The time to wait for SSH to become available. Packer uses this to
+  determine when the machine has booted so this is usually quite long.
+  Example value: `10m`.
+  This defaults to `5m`, unless `ssh_handshake_attempts` is set.
+
+- `ssh_disable_agent_forwarding` (bool) - If true, SSH agent forwarding will be disabled. Defaults to `false`.
+
+- `ssh_handshake_attempts` (int) - The number of handshakes to attempt with SSH once it can connect.
+  This defaults to `10`, unless a `ssh_timeout` is set.
+
+- `ssh_bastion_host` (string) - A bastion host to use for the actual SSH connection.
+
+- `ssh_bastion_port` (int) - The port of the bastion host. Defaults to `22`.
+
+- `ssh_bastion_agent_auth` (bool) - If `true`, the local SSH agent will be used to authenticate with the
+  bastion host. Defaults to `false`.
+
+- `ssh_bastion_username` (string) - The username to connect to the bastion host.
+
+- `ssh_bastion_password` (string) - The password to use to authenticate with the bastion host.
+
+- `ssh_bastion_interactive` (bool) - If `true`, the keyboard-interactive used to authenticate with bastion host.
+
+- `ssh_bastion_private_key_file` (string) - Path to a PEM encoded private key file to use to authenticate with the
+  bastion host. The `~` can be used in path and will be expanded to the
+  home directory of current user.
+
+- `ssh_bastion_certificate_file` (string) - Path to user certificate used to authenticate with bastion host.
+  The `~` can be used in path and will be expanded to the
+  home directory of current user.
+
+- `ssh_file_transfer_method` (string) - `scp` or `sftp` - How to transfer files, Secure copy (default) or SSH
+  File Transfer Protocol.
+
+- `ssh_proxy_host` (string) - A SOCKS proxy host to use for SSH connection
+
+- `ssh_proxy_port` (int) - A port of the SOCKS proxy. Defaults to `1080`.
+
+- `ssh_proxy_username` (string) - The optional username to authenticate with the proxy server.
+
+- `ssh_proxy_password` (string) - The optional password to use to authenticate with the proxy server.
+
+- `ssh_keep_alive_interval` (duration string | ex: "1h5m2s") - How often to send "keep alive" messages to the server. Set to a negative
+  value (`-1s`) to disable. Example value: `10s`. Defaults to `5s`.
+
+- `ssh_read_write_timeout` (duration string | ex: "1h5m2s") - The amount of time to wait for a remote command to end. This might be
+  useful if, for example, packer hangs on a connection after a reboot.
+  Example: `5m`. Disabled by default.
+
+- `ssh_remote_tunnels` ([]string) - 
+
+- `ssh_local_tunnels` ([]string) - 
+
+<!-- End of code generated from the comments of the SSH struct in communicator/config.go; -->
+
+
+<!-- Code generated from the comments of the SSHTemporaryKeyPair struct in communicator/config.go; DO NOT EDIT MANUALLY -->
+
+- `temporary_key_pair_type` (string) - `dsa` | `ecdsa` | `ed25519` | `rsa` ( the default )
+  
+  Specifies the type of key to create. The possible values are 'dsa',
+  'ecdsa', 'ed25519', or 'rsa'.
+
+- `temporary_key_pair_bits` (int) - Specifies the number of bits in the key to create. For RSA keys, the
+  minimum size is 1024 bits and the default is 4096 bits. Generally, 3072
+  bits is considered sufficient. DSA keys must be exactly 1024 bits as
+  specified by FIPS 186-2. For ECDSA keys, bits determines the key length
+  by selecting from one of three elliptic curve sizes: 256, 384 or 521
+  bits. Attempting to use bit lengths other than these three values for
+  ECDSA keys will fail. Ed25519 keys have a fixed length and bits will be
+  ignored.
+
+<!-- End of code generated from the comments of the SSHTemporaryKeyPair struct in communicator/config.go; -->
+
