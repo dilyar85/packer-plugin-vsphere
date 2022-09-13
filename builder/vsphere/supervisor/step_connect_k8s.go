@@ -22,8 +22,10 @@ const (
 )
 
 type ConnectK8sConfig struct {
+	// The path to kubeconfig file for accessing to the vSphere Supervisor cluster. Defaults to `KUBECONFIG` env var value if set or K8s's `RecommendedHomeFile`.
 	KubeconfigPath string `mapstructure:"kubeconfig_path"`
-	K8sNamespace   string `mapstructure:"k8s_namespace"`
+	// The namespace to deploy the source VM. Defaults to the namespace of the current context in the kubeconfig file.
+	K8sNamespace string `mapstructure:"k8s_namespace"`
 }
 
 func (c *ConnectK8sConfig) Prepare() []error {

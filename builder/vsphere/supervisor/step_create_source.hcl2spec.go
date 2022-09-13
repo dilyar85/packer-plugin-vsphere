@@ -10,9 +10,9 @@ import (
 // FlatCreateSourceConfig is an auto-generated flat version of CreateSourceConfig.
 // Where the contents of a field with a `mapstructure:,squash` tag are bubbled up.
 type FlatCreateSourceConfig struct {
-	ImageName    *string `mapstructure:"image_name" cty:"image_name" hcl:"image_name"`
-	ClassName    *string `mapstructure:"class_name" cty:"class_name" hcl:"class_name"`
-	StorageClass *string `mapstructure:"storage_class" cty:"storage_class" hcl:"storage_class"`
+	ImageName    *string `mapstructure:"image_name" required:"true" cty:"image_name" hcl:"image_name"`
+	ClassName    *string `mapstructure:"class_name" required:"true" cty:"class_name" hcl:"class_name"`
+	StorageClass *string `mapstructure:"storage_class" required:"true" cty:"storage_class" hcl:"storage_class"`
 	SourceName   *string `mapstructure:"source_name" cty:"source_name" hcl:"source_name"`
 	NetworkType  *string `mapstructure:"network_type" cty:"network_type" hcl:"network_type"`
 	NetworkName  *string `mapstructure:"network_name" cty:"network_name" hcl:"network_name"`

@@ -34,16 +34,21 @@ var (
 )
 
 type CreateSourceConfig struct {
-	// Required configs.
-	ImageName    string `mapstructure:"image_name"`
-	ClassName    string `mapstructure:"class_name"`
-	StorageClass string `mapstructure:"storage_class"`
+	// Name of the the content library image to deploy the source VM.
+	ImageName string `mapstructure:"image_name" required:"true"`
+	// Name of the VM class that describes the virtual hardware settings of the source VM.
+	ClassName string `mapstructure:"class_name" required:"true"`
+	// Name of the storage class that configures storage-related attributes of the source VM.
+	StorageClass string `mapstructure:"storage_class" required:"true"`
 
-	// Optional configs.
-	SourceName  string `mapstructure:"source_name"`
+	// Name of the source VM. Defaults to `packer-supervisor-built-source`.
+	SourceName string `mapstructure:"source_name"`
+	// Name of the network type to attach to the source VM's network interface.
 	NetworkType string `mapstructure:"network_type"`
+	// Name of the network to attach to the source VM's network interface.
 	NetworkName string `mapstructure:"network_name"`
-	KeepSource  bool   `mapstructure:"keep_source"`
+	// Keep all created source object once the builder is done. Defaults to `false`.
+	KeepSource bool `mapstructure:"keep_source"`
 }
 
 func (c *CreateSourceConfig) Prepare() []error {

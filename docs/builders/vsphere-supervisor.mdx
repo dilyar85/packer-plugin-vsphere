@@ -1,0 +1,52 @@
+---
+modeline: |
+  vim: set ft=pandoc:
+description: >
+  The Packer builder that deploys a VM-Service vm to a vSphere Supervisor cluster.
+page_title: vSphere Supervisor - Builders
+sidebar_title: Supervisor
+---
+
+# VMware vSphere Supervisor Builder
+
+Type: `vsphere-supervisor`
+Artifact BuilderId: `jetbrains.vsphere`
+
+This builder deploys VMs with the specified content library image to a vSphere Supervisor cluster.
+
+- It uses the current or provided KUBECONFIG file connecting to the vSphere Supervisor cluster.
+- It uses the VM-Service API to deploy the source VM.
+- It uses the Packer supported provisioners to configure the VM after deployment.
+- A new release will be coming up soon to publish the customized VM to content library.
+
+## Examples
+
+See provided template files in the [examples/supervisor folder](https://github.com/hashicorp/packer-plugin-vsphere/tree/main/builder/vsphere/examples/supervisor).
+
+## Configuration Reference
+There are many configuration options available for each step in this builder. The _required_ items are listed below as well as the _optional_ configs further down the page.
+
+### Required
+
+@include 'builder/vsphere/supervisor/CreateSourceConfig-required.mdx'
+
+
+### Optional
+
+#### Supervisor Cluster Connection
+
+@include 'builder/vsphere/supervisor/ConnectK8sConfig-not-required.mdx'
+
+#### Source VM Creation
+
+@include 'builder/vsphere/supervisor/CreateSourceConfig-not-required.mdx'
+
+#### Source VM Watching
+
+@include 'builder/vsphere/supervisor/WatchSourceConfig-not-required.mdx'
+
+#### SSH Configuration
+
+@include 'packer-plugin-sdk/communicator/SSH-not-required.mdx'
+
+@include 'packer-plugin-sdk/communicator/SSHTemporaryKeyPair-not-required.mdx'

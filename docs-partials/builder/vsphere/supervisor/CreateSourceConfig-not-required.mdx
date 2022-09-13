@@ -1,17 +1,11 @@
 <!-- Code generated from the comments of the CreateSourceConfig struct in builder/vsphere/supervisor/step_create_source.go; DO NOT EDIT MANUALLY -->
 
-- `image_name` (string) - Required configs.
+- `source_name` (string) - Name of the source VM. Defaults to `packer-supervisor-built-source`.
 
-- `class_name` (string) - Class Name
+- `network_type` (string) - Name of the network type to attach to the source VM's network interface.
 
-- `storage_class` (string) - Storage Class
+- `network_name` (string) - Name of the network to attach to the source VM's network interface.
 
-- `source_name` (string) - Optional configs.
-
-- `network_type` (string) - Network Type
-
-- `network_name` (string) - Network Name
-
-- `keep_source` (bool) - Keep Source
+- `keep_source` (bool) - Keep all created source object once the builder is done. Defaults to `false`.
 
 <!-- End of code generated from the comments of the CreateSourceConfig struct in builder/vsphere/supervisor/step_create_source.go; -->
