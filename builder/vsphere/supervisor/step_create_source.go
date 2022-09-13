@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	DefaultSourceName  = "packer-supervisor-built-source"
+	DefaultSourceName  = "packer-vsphere-supervisor-built-source"
 	VMSelectorLabelKey = DefaultSourceName + "-selector"
 
 	StateKeyKubeRestClient          = "kube_rest_client"
@@ -34,11 +34,11 @@ var (
 )
 
 type CreateSourceConfig struct {
-	// Name of the the content library image to deploy the source VM.
+	// Name of the the source virtual machine (VM) image.
 	ImageName string `mapstructure:"image_name" required:"true"`
-	// Name of the VM class that describes the virtual hardware settings of the source VM.
+	// Name of the VM class that describes virtual hardware settings.
 	ClassName string `mapstructure:"class_name" required:"true"`
-	// Name of the storage class that configures storage-related attributes of the source VM.
+	// Name of the storage class that configures storage-related attributes.
 	StorageClass string `mapstructure:"storage_class" required:"true"`
 
 	// Name of the source VM. Defaults to `packer-supervisor-built-source`.
@@ -47,7 +47,7 @@ type CreateSourceConfig struct {
 	NetworkType string `mapstructure:"network_type"`
 	// Name of the network to attach to the source VM's network interface.
 	NetworkName string `mapstructure:"network_name"`
-	// Keep all created source object once the builder is done. Defaults to `false`.
+	// Keep all created source objects once the builder is done. Defaults to `false`.
 	KeepSource bool `mapstructure:"keep_source"`
 }
 
@@ -209,6 +209,7 @@ users:
     - %s
     sudo: ALL=(ALL) NOPASSWD:ALL
     shell: /bin/bash
+ssh_pwauth: True
 write_files:
   - content: |
       Packer Plugin Says Hello World

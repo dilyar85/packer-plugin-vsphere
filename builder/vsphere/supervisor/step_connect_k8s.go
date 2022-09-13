@@ -22,9 +22,9 @@ const (
 )
 
 type ConnectK8sConfig struct {
-	// The path to kubeconfig file for accessing to the vSphere Supervisor cluster. Defaults to `KUBECONFIG` env var value if set or K8s's `RecommendedHomeFile`.
+	// The path to kubeconfig file for accessing to the vSphere Supervisor cluster. Defaults to the value of `KUBECONFIG` envvar or `$HOME/.kube/config` if the envvar is not set.
 	KubeconfigPath string `mapstructure:"kubeconfig_path"`
-	// The namespace to deploy the source VM. Defaults to the namespace of the current context in the kubeconfig file.
+	// The namespace to deploy the source VM. Defaults to the namespace of the current context.
 	K8sNamespace string `mapstructure:"k8s_namespace"`
 }
 
