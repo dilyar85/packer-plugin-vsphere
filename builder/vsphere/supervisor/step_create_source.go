@@ -114,7 +114,7 @@ func (s *StepCreateSource) createVMService(ctx context.Context, logger *PackerLo
 		return err
 	}
 
-	logger.Info("Creating the VMService object with the kube REST client")
+	logger.Info("Creating the VMService object with the Kube REST client")
 	data, err := s.KubeRestClient.
 		Post().
 		AbsPath(fmt.Sprintf("/apis/%s", vmopAPIVersion)).
@@ -177,7 +177,7 @@ func (s *StepCreateSource) createVM(ctx context.Context, logger *PackerLogger) e
 		return err
 	}
 
-	logger.Info("Creating the source VirtualMachine object with the kube REST client")
+	logger.Info("Creating the source VirtualMachine object with the Kube REST client")
 	data, err := s.KubeRestClient.
 		Post().
 		AbsPath(fmt.Sprintf("/apis/%s", vmopAPIVersion)).
@@ -209,11 +209,7 @@ users:
     - %s
     sudo: ALL=(ALL) NOPASSWD:ALL
     shell: /bin/bash
-ssh_pwauth: True
-write_files:
-  - content: |
-      Packer Plugin Says Hello World
-    path: /helloworld
+ssh_pwauth: true
 `
 	cloudInitStr := fmt.Sprintf(cloudInitFmt,
 		s.CommunicatorConfig.SSHUsername,
@@ -259,13 +255,13 @@ func (s *StepCreateSource) Run(ctx context.Context, state multistep.StateBag) mu
 
 	if err = CheckRequiredStates(state,
 		StateKeyKubeClientSet,
-		StateKeyK8sNamespace,
+		StateKeySupervisorNamespace,
 	); err != nil {
 		return multistep.ActionHalt
 	}
 
 	s.KubeClientSet = state.Get(StateKeyKubeClientSet).(kubernetes.Interface)
-	s.K8sNamespace = state.Get("k8s_namespace").(string)
+	s.K8sNamespace = state.Get(StateKeySupervisorNamespace).(string)
 	// StateKeyKubeRestClient will be set separately in testing.
 	if val, ok := state.GetOk(StateKeyKubeRestClient); ok {
 		s.KubeRestClient = val.(rest.Interface)

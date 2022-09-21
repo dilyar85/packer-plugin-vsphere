@@ -6,7 +6,7 @@ source "vsphere-supervisor" "vm" {
   class_name = "best-effort-large"
   storage_class = "wcplocal-storage-profile"
   kubeconfig_path = "~/.kube/config"
-  k8s_namespace = "nginx-test"
+  supervisor_namespace = "nginx-test"
   source_name = "packer-vsphere-supervisor-example"
   network_type = "nsx-t"
   ssh_username = "root"

@@ -41,7 +41,7 @@
     - name: Remove VMware created logs
       shell:
         cmd: |
-          find /var/log -t ype f -iname 'vmware-*.log*' -exec rm {} +
+          find /var/log -type f -iname 'vmware-*.log*' -exec rm {} +
 
     - name: Truncate all remaining log files in /var/log
       shell:

@@ -1,11 +1,10 @@
 //go:generate packer-sdc struct-markdown
-//go:generate packer-sdc mapstructure-to-hcl2 -type ConnectK8sConfig
+//go:generate packer-sdc mapstructure-to-hcl2 -type ConnectSupervisorConfig
 
 package supervisor
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"k8s.io/client-go/dynamic"
@@ -13,22 +12,23 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/hashicorp/packer-plugin-sdk/multistep"
+	"github.com/pkg/errors"
 )
 
 const (
-	StateKeyK8sNamespace      = "k8s_namespace"
-	StateKeyKubeClientSet     = "kube_client_set"
-	StateKeyKubeDynamicClient = "kube_dynamic_client"
+	StateKeySupervisorNamespace = "supervisor_namespace"
+	StateKeyKubeClientSet       = "kube_client_set"
+	StateKeyKubeDynamicClient   = "kube_dynamic_client"
 )
 
-type ConnectK8sConfig struct {
+type ConnectSupervisorConfig struct {
 	// The path to kubeconfig file for accessing to the vSphere Supervisor cluster. Defaults to the value of `KUBECONFIG` envvar or `$HOME/.kube/config` if the envvar is not set.
 	KubeconfigPath string `mapstructure:"kubeconfig_path"`
-	// The namespace to deploy the source VM. Defaults to the namespace of the current context.
-	K8sNamespace string `mapstructure:"k8s_namespace"`
+	// The Supervisor namespace to deploy the source VM. Defaults to the current context's namespace in kube config.
+	SupervisorNamespace string `mapstructure:"supervisor_namespace"`
 }
 
-func (c *ConnectK8sConfig) Prepare() []error {
+func (c *ConnectSupervisorConfig) Prepare() []error {
 	// Set the kubeconfig path from KUBECONFIG env var or the default path if not provided.
 	if c.KubeconfigPath == "" {
 		if val := os.Getenv(clientcmd.RecommendedConfigPathEnvVar); val != "" {
@@ -38,32 +38,32 @@ func (c *ConnectK8sConfig) Prepare() []error {
 		}
 	}
 
-	// Set the K8s namespace from current context if not provided.
-	if c.K8sNamespace == "" {
+	// Set the Supervisor namespace from current context if not provided.
+	if c.SupervisorNamespace == "" {
 		data, err := os.ReadFile(c.KubeconfigPath)
 		if err != nil {
-			return []error{fmt.Errorf("failed to read kubeconfig file: %s", err)}
+			return []error{errors.Wrap(err, "failed to read kubeconfig file")}
 		}
 		kubeConfig, err := clientcmd.NewClientConfigFromBytes(data)
 		if err != nil {
-			return []error{fmt.Errorf("failed to parse kubeconfig file: %s", err)}
+			return []error{errors.Wrap(err, "failed to parse kubeconfig file")}
 		}
 		ns, _, err := kubeConfig.Namespace()
 		if err != nil {
-			return []error{fmt.Errorf("failed to get namespace from current context: %s", err)}
+			return []error{errors.Wrap(err, "failed to get current context's namespace in kubeconfig file")}
 		}
 
-		c.K8sNamespace = ns
+		c.SupervisorNamespace = ns
 	}
 
 	return nil
 }
 
-type StepConnectK8s struct {
-	Config *ConnectK8sConfig
+type StepConnectSupervisor struct {
+	Config *ConnectSupervisorConfig
 }
 
-func (s *StepConnectK8s) getKubeClients() (*kubernetes.Clientset, dynamic.Interface, error) {
+func (s *StepConnectSupervisor) getKubeClients() (*kubernetes.Clientset, dynamic.Interface, error) {
 	config, err := clientcmd.BuildConfigFromFlags("", s.Config.KubeconfigPath)
 	if err != nil {
 		return nil, nil, err
@@ -82,9 +82,9 @@ func (s *StepConnectK8s) getKubeClients() (*kubernetes.Clientset, dynamic.Interf
 	return clientSet, dynamicClient, nil
 }
 
-func (s *StepConnectK8s) Run(ctx context.Context, state multistep.StateBag) multistep.StepAction {
+func (s *StepConnectSupervisor) Run(ctx context.Context, state multistep.StateBag) multistep.StepAction {
 	logger := state.Get("logger").(*PackerLogger)
-	logger.Info("Connecting to Supervisor K8s cluster...")
+	logger.Info("Connecting to Supervisor cluster...")
 
 	clientSet, dynamicClient, err := s.getKubeClients()
 	if err != nil {
@@ -93,10 +93,10 @@ func (s *StepConnectK8s) Run(ctx context.Context, state multistep.StateBag) mult
 	}
 	state.Put(StateKeyKubeClientSet, clientSet)
 	state.Put(StateKeyKubeDynamicClient, dynamicClient)
-	state.Put(StateKeyK8sNamespace, s.Config.K8sNamespace)
+	state.Put(StateKeySupervisorNamespace, s.Config.SupervisorNamespace)
 
-	logger.Info("Successfully connected to the Supervisor cluster")
+	logger.Info("Successfully connected to Supervisor cluster")
 	return multistep.ActionContinue
 }
 
-func (s *StepConnectK8s) Cleanup(multistep.StateBag) {}
+func (s *StepConnectSupervisor) Cleanup(multistep.StateBag) {}

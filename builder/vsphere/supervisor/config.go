@@ -14,13 +14,13 @@ import (
 )
 
 const (
-	defaultSSHUsername = "root"
+	defaultSSHUsername = "default-user"
 )
 
 type Config struct {
 	packercommon.PackerConfig `mapstructure:",squash"`
 	CommunicatorConfig        communicator.Config `mapstructure:",squash"`
-	ConnectK8sConfig          `mapstructure:",squash"`
+	ConnectSupervisorConfig   `mapstructure:",squash"`
 	CreateSourceConfig        `mapstructure:",squash"`
 	WatchSourceConfig         `mapstructure:",squash"`
 
@@ -50,7 +50,7 @@ func (c *Config) Prepare(raws ...interface{}) ([]string, error) {
 
 	errs := new(packersdk.MultiError)
 	errs = packersdk.MultiErrorAppend(errs, c.CommunicatorConfig.Prepare(&c.ctx)...)
-	errs = packersdk.MultiErrorAppend(errs, c.ConnectK8sConfig.Prepare()...)
+	errs = packersdk.MultiErrorAppend(errs, c.ConnectSupervisorConfig.Prepare()...)
 	errs = packersdk.MultiErrorAppend(errs, c.CreateSourceConfig.Prepare()...)
 	errs = packersdk.MultiErrorAppend(errs, c.WatchSourceConfig.Prepare()...)
 

@@ -95,7 +95,11 @@ func (s *StepWatchSource) waitForVMReady(
 				return "", fmt.Errorf("timed out watching for source VM object to be ready")
 			}
 
-			obj := event.Object.(*unstructured.Unstructured)
+			obj, ok := event.Object.(*unstructured.Unstructured)
+			if !ok {
+				return "", fmt.Errorf("failed to convert the watch event object to unstructured")
+			}
+
 			vmIP, found, err := unstructured.NestedString(obj.Object, "status", "vmIp")
 			if err != nil {
 				logger.Error("Failed to get the source VM IP")
@@ -132,7 +136,7 @@ func (s *StepWatchSource) Run(ctx context.Context, state multistep.StateBag) mul
 	if err = CheckRequiredStates(state,
 		StateKeyKubeClientSet,
 		// StateKeyKubeDynamicClient,
-		StateKeyK8sNamespace,
+		StateKeySupervisorNamespace,
 		StateKeySourceName,
 	); err != nil {
 		return multistep.ActionHalt
@@ -140,7 +144,7 @@ func (s *StepWatchSource) Run(ctx context.Context, state multistep.StateBag) mul
 
 	kubeClientSet := state.Get(StateKeyKubeClientSet).(kubernetes.Interface)
 	dynamicClient := state.Get(StateKeyKubeDynamicClient).(dynamic.Interface)
-	namespace := state.Get(StateKeyK8sNamespace).(string)
+	namespace := state.Get(StateKeySupervisorNamespace).(string)
 	sourceName := state.Get(StateKeySourceName).(string)
 
 	// Wait for the source VM to power up and have an IP assigned.

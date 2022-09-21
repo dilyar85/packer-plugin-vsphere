@@ -155,7 +155,7 @@ func TestCreateSource_Run(t *testing.T) {
 	testKubeClientSet := kubefake.NewSimpleClientset()
 	state.Put(supervisor.StateKeyKubeClientSet, testKubeClientSet)
 	state.Put(supervisor.StateKeyKubeRestClient, mockRESTClientForCreateSourceRun(t))
-	state.Put(supervisor.StateKeyK8sNamespace, "test-ns")
+	state.Put(supervisor.StateKeySupervisorNamespace, "test-ns")
 
 	action := step.Run(context.TODO(), state)
 	if action == multistep.ActionHalt {
@@ -244,10 +244,10 @@ func TestCreateSource_Run(t *testing.T) {
 		"Applying the source K8s Secret object with the kube CoreV1Client",
 		"Created the source K8s Secret object",
 		"Initializing a source VirtualMachine object for customization",
-		"Creating the source VirtualMachine object with the kube REST client",
+		"Creating the source VirtualMachine object with the Kube REST client",
 		"Created the source VirtualMachine object",
 		"Initializing a source VMService object for setting up communication",
-		"Creating the VMService object with the kube REST client",
+		"Creating the VMService object with the Kube REST client",
 		"Created the source VMService object",
 		"Successfully created all required objects in the Supervisor cluster",
 	}

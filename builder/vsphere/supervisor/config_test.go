@@ -12,7 +12,7 @@ func getCompleteConfig() map[string]interface{} {
 		"class_name":               "test-class",
 		"storage_class":            "test-storage",
 		"kubeconfig_path":          "test-kubeconfig",
-		"k8s_namespace":            "test-namespace",
+		"supervisor_namespace":     "test-namespace",
 		"source_name":              "test-source",
 		"network_type":             "test-networkType",
 		"network_name":             "test-networkName",
@@ -32,9 +32,9 @@ func getMinimaConfig() map[string]interface{} {
 func TestSupervisorConfig_Minimal(t *testing.T) {
 	c := new(supervisor.Config)
 	minConfigs := getMinimaConfig()
-	// k8s_namespace is an optional config but it requires a kubeconfig file with valid content.
+	// supervisor_namespace is an optional config but it requires a kubeconfig file with valid content.
 	// Adding it here to avoid test failing when executed from an environment without such valid file.
-	minConfigs["k8s_namespace"] = "test-ns"
+	minConfigs["supervisor_namespace"] = "test-ns"
 	warns, err := c.Prepare(minConfigs)
 	if len(warns) != 0 {
 		t.Errorf("expected no warnings, got: %#v", warns)
@@ -92,8 +92,8 @@ func TestSupervisorConfig_Values(t *testing.T) {
 	if c.KubeconfigPath != providedConfigs["kubeconfig_path"] {
 		t.Errorf("expected kubeconfig_path to be: %s, got: %s", providedConfigs["kubeconfig_path"], c.KubeconfigPath)
 	}
-	if c.K8sNamespace != providedConfigs["k8s_namespace"] {
-		t.Errorf("expected k8s_namespace to be: %s, got: %s", providedConfigs["k8s_namespace"], c.K8sNamespace)
+	if c.SupervisorNamespace != providedConfigs["supervisor_namespace"] {
+		t.Errorf("expected supervisor_namespace to be: %s, got: %s", providedConfigs["supervisor_namespace"], c.SupervisorNamespace)
 	}
 	if c.SourceName != providedConfigs["source_name"] {
 		t.Errorf("expected source_name to be: %s, got: %s", providedConfigs["source_name"], c.SourceName)

@@ -41,9 +41,9 @@ func (b *Builder) Run(ctx context.Context, ui packersdk.Ui, hook packersdk.Hook)
 		&communicator.StepSSHKeyGen{
 			CommConf: &b.config.CommunicatorConfig,
 		},
-		// Connect to the K8s cluster where the source VM created.
-		&StepConnectK8s{
-			Config: &b.config.ConnectK8sConfig,
+		// Connect to the Supervisor cluster where the source VM created.
+		&StepConnectSupervisor{
+			Config: &b.config.ConnectSupervisorConfig,
 		},
 		// Create a source VM and other related resources.
 		&StepCreateSource{

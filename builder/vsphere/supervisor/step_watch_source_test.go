@@ -82,7 +82,7 @@ func TestWatchSource_Run(t *testing.T) {
 	state := newBasicTestState(testWriter)
 	state.Put(supervisor.StateKeyKubeClientSet, fakeKubClientSet)
 	state.Put(supervisor.StateKeyKubeDynamicClient, fakeDynamicClient)
-	state.Put(supervisor.StateKeyK8sNamespace, testNamespace)
+	state.Put(supervisor.StateKeySupervisorNamespace, testNamespace)
 	state.Put(supervisor.StateKeySourceName, testSourceName)
 
 	// Run this step in a new goroutine as it contains a blocking 'watch' process.

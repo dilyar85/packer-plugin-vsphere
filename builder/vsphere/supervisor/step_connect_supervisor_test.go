@@ -45,11 +45,11 @@ kind: Config
 	return fakeFile
 }
 
-func TestConnectK8s_Prepare(t *testing.T) {
+func TestConnectSupervisor_Prepare(t *testing.T) {
 	// Check kubeconfig path when the KUBECONFIG env var is set.
 	os.Setenv(clientcmd.RecommendedConfigPathEnvVar, "test-path")
-	config := &supervisor.ConnectK8sConfig{
-		K8sNamespace: "fake", // avoid reading the config file
+	config := &supervisor.ConnectSupervisorConfig{
+		SupervisorNamespace: "fake", // avoid reading the config file
 	}
 	if errs := config.Prepare(); len(errs) != 0 {
 		t.Fatalf("Prepare should NOT fail: %v", errs)
@@ -68,26 +68,26 @@ func TestConnectK8s_Prepare(t *testing.T) {
 		t.Errorf("KubeconfigPath should be '%s', but got '%s'", clientcmd.RecommendedHomeFile, config.KubeconfigPath)
 	}
 
-	// Check k8s namespace from the given kubeconfig file context.
+	// Check Supervisor namespace from the given kubeconfig file context.
 	testFile := getTestKubeconfigFile(t, "test-ns")
 	config.KubeconfigPath = testFile.Name()
-	config.K8sNamespace = ""
+	config.SupervisorNamespace = ""
 	if errs := config.Prepare(); len(errs) != 0 {
 		t.Fatalf("Prepare should NOT fail: %s", errs[0])
 	}
-	if config.K8sNamespace != "test-ns" {
-		t.Errorf("K8sNamespace should be 'test-ns' but got '%s'", config.K8sNamespace)
+	if config.SupervisorNamespace != "test-ns" {
+		t.Errorf("Supervisor namespace should be 'test-ns' but got '%s'", config.SupervisorNamespace)
 	}
 }
 
-func TestConnectK8s_Run(t *testing.T) {
+func TestConnectSupervisor_Run(t *testing.T) {
 	// Set up required config and state for running the step.
 	testFile := getTestKubeconfigFile(t, "test-ns")
-	config := &supervisor.ConnectK8sConfig{
-		KubeconfigPath: testFile.Name(),
-		K8sNamespace:   "test-ns",
+	config := &supervisor.ConnectSupervisorConfig{
+		KubeconfigPath:      testFile.Name(),
+		SupervisorNamespace: "test-ns",
 	}
-	step := supervisor.StepConnectK8s{
+	step := supervisor.StepConnectSupervisor{
 		Config: config,
 	}
 	testWriter := new(bytes.Buffer)
@@ -105,21 +105,21 @@ func TestConnectK8s_Run(t *testing.T) {
 	if err := supervisor.CheckRequiredStates(state,
 		supervisor.StateKeyKubeClientSet,
 		supervisor.StateKeyKubeDynamicClient,
-		supervisor.StateKeyK8sNamespace,
+		supervisor.StateKeySupervisorNamespace,
 	); err != nil {
 		t.Fatalf("Missing required states: %s", err)
 	}
 
-	// Check if the k8s namespace value is set correctly in the state.
-	k8sNamespace := state.Get(supervisor.StateKeyK8sNamespace)
-	if k8sNamespace != "test-ns" {
-		t.Errorf("State '%s' should be 'test-ns', but got '%s'", supervisor.StateKeyK8sNamespace, k8sNamespace)
+	// Check if the Supervisor namespace value is set correctly in the state.
+	namespace := state.Get(supervisor.StateKeySupervisorNamespace)
+	if namespace != "test-ns" {
+		t.Errorf("State '%s' should be 'test-ns', but got '%s'", supervisor.StateKeySupervisorNamespace, namespace)
 	}
 
 	// Check the output lines from the step runs.
 	expectedLines := []string{
-		"Connecting to Supervisor K8s cluster...",
-		"Successfully connected to the Supervisor cluster",
+		"Connecting to Supervisor cluster...",
+		"Successfully connected to Supervisor cluster",
 	}
 	checkOutputLines(t, testWriter, expectedLines)
 }
