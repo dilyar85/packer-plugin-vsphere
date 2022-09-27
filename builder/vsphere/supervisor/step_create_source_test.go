@@ -3,102 +3,21 @@ package supervisor_test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net/http"
 	"reflect"
-	"strings"
 	"testing"
+
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hashicorp/packer-plugin-sdk/communicator"
 	"github.com/hashicorp/packer-plugin-sdk/multistep"
 	vmopv1alpha1 "github.com/vmware-tanzu/vm-operator-api/api/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	kubefake "k8s.io/client-go/kubernetes/fake"
-	restfake "k8s.io/client-go/rest/fake"
 
 	"github.com/hashicorp/packer-plugin-vsphere/builder/vsphere/supervisor"
 )
-
-var (
-	testCreatedVMObj        *vmopv1alpha1.VirtualMachine
-	testCreatedVMServiceObj *vmopv1alpha1.VirtualMachineService
-)
-
-func parseObjFromReq(t *testing.T, req *http.Request, obj interface{}) {
-	reqBody, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		t.Fatal("expected no error, got:", err)
-	}
-	if err := json.Unmarshal(reqBody, obj); err != nil {
-		t.Fatal("expected no error, got:", err)
-	}
-}
-
-func mockRESTClientForCreateSourceCleanup(t *testing.T, sourceName, namespace string) *restfake.RESTClient {
-	expectedReqPathFmt := "/apis/vmoperator.vmware.com/v1alpha1/namespaces/%s/%s/%s"
-	expectedReqPath := ""
-
-	return &restfake.RESTClient{
-		Client: restfake.CreateHTTPClient(func(req *http.Request) (*http.Response, error) {
-			switch req.Method {
-			case "DELETE":
-				// Check 'virtualmachineservices' first as it also contains 'virtualmachines'.
-				if strings.Contains(req.URL.Path, "virtualmachineservices") {
-					expectedReqPath = fmt.Sprintf(expectedReqPathFmt, namespace, "virtualmachineservices", sourceName)
-				} else if strings.Contains(req.URL.Path, "virtualmachines") {
-					expectedReqPath = fmt.Sprintf(expectedReqPathFmt, namespace, "virtualmachines", sourceName)
-				} else {
-					t.Fatalf("received unexpected resource: %s", req.URL.Path)
-				}
-
-				// Verify the client is deleting the correct resource.
-				if req.URL.Path != expectedReqPath {
-					t.Fatalf("Expected request path '%s' but got '%s'", expectedReqPath, req.URL.Path)
-				}
-
-			default:
-				t.Fatalf("received unexpected method: %s", req.Method)
-			}
-
-			return &http.Response{
-				StatusCode: http.StatusOK,
-			}, nil
-		}),
-	}
-}
-
-func mockRESTClientForCreateSourceRun(t *testing.T) *restfake.RESTClient {
-	// Reset the VM and VMService objects and parse them from the REST client requests.
-	testCreatedVMObj = &vmopv1alpha1.VirtualMachine{}
-	testCreatedVMServiceObj = &vmopv1alpha1.VirtualMachineService{}
-
-	return &restfake.RESTClient{
-		Client: restfake.CreateHTTPClient(func(req *http.Request) (*http.Response, error) {
-			switch req.Method {
-			case "POST":
-				// Check 'virtualmachineservices' first as it also contains 'virtualmachines'.
-				if strings.Contains(req.URL.Path, "virtualmachineservices") {
-					parseObjFromReq(t, req, testCreatedVMServiceObj)
-				} else if strings.Contains(req.URL.Path, "virtualmachines") {
-					parseObjFromReq(t, req, testCreatedVMObj)
-				} else {
-					t.Fatalf("received unexpected resource: %s", req.URL.Path)
-				}
-
-			default:
-				t.Fatalf("received unexpected method: %s", req.Method)
-			}
-
-			return &http.Response{
-				StatusCode: http.StatusOK,
-			}, nil
-		}),
-	}
-}
 
 func TestCreateSource_Prepare(t *testing.T) {
 	// Check error output when missing the required config.
@@ -132,7 +51,7 @@ func TestCreateSource_Prepare(t *testing.T) {
 }
 
 func TestCreateSource_Run(t *testing.T) {
-	// Set up required config and state for running the step.
+	// Initialize the step with required configs.
 	config := &supervisor.CreateSourceConfig{
 		ImageName:    "test-image",
 		ClassName:    "test-class",
@@ -150,14 +69,17 @@ func TestCreateSource_Run(t *testing.T) {
 		Config:             config,
 		CommunicatorConfig: commConfig,
 	}
+
+	// Set up required state for running this step.
+	testNamespace := "test-namespace"
+	kubeClient := newFakeKubeClient()
 	testWriter := new(bytes.Buffer)
 	state := newBasicTestState(testWriter)
-	testKubeClientSet := kubefake.NewSimpleClientset()
-	state.Put(supervisor.StateKeyKubeClientSet, testKubeClientSet)
-	state.Put(supervisor.StateKeyKubeRestClient, mockRESTClientForCreateSourceRun(t))
-	state.Put(supervisor.StateKeySupervisorNamespace, "test-ns")
+	state.Put(supervisor.StateKeyKubeClient, kubeClient)
+	state.Put(supervisor.StateKeySupervisorNamespace, testNamespace)
 
-	action := step.Run(context.TODO(), state)
+	ctx := context.TODO()
+	action := step.Run(ctx, state)
 	if action == multistep.ActionHalt {
 		if rawErr, ok := state.GetOk("error"); ok {
 			t.Errorf("Error from running the step: %s", rawErr.(error))
@@ -165,61 +87,71 @@ func TestCreateSource_Run(t *testing.T) {
 		t.Fatal("Step should NOT halt")
 	}
 
-	// Check if the source Secret (VM-Metadata) object is created as expected.
-	testCreatedSecretObj, err := testKubeClientSet.CoreV1().Secrets("test-ns").
-		Get(context.TODO(), "test-source", metav1.GetOptions{})
-	if err != nil {
+	// Check if the K8s Secret object is created with expected spec.
+	objKey := client.ObjectKey{
+		Namespace: testNamespace,
+		Name:      config.SourceName,
+	}
+	secretObj := &corev1.Secret{}
+	if err := kubeClient.Get(ctx, objKey, secretObj); err != nil {
 		t.Fatalf("Failed to get the expected Secret object, err: %s", err.Error())
 	}
-	if testCreatedSecretObj == nil || testCreatedSecretObj.StringData["user-data"] == "" {
-		t.Errorf("Expected Secret object to contain user-data, got: %v", testCreatedSecretObj)
+	if secretObj == nil || secretObj.StringData["user-data"] == "" {
+		t.Errorf("Expected the Secret object to be created with user-data, got: %v", secretObj)
 	}
 
-	// Check if the source VM object is created as expected.
-	if testCreatedVMObj == nil {
-		t.Fatal("Source VM object is nil")
+	// Check if the source VM object is created with expected spec.
+	vmObj := &vmopv1alpha1.VirtualMachine{}
+	if err := kubeClient.Get(ctx, objKey, vmObj); err != nil {
+		t.Fatalf("Failed to get the expected VM object, err: %s", err.Error())
 	}
-	if testCreatedVMObj.Name != "test-source" {
-		t.Errorf("Expected source VM name 'test-vm', got '%s'", testCreatedVMObj.Name)
+	if vmObj == nil {
+		t.Fatal("VM object is nil")
 	}
-	if testCreatedVMObj.Namespace != "test-ns" {
-		t.Errorf("Expected source VM namespace 'test-ns', got '%s'", testCreatedVMObj.Namespace)
+	if vmObj.Name != "test-source" {
+		t.Errorf("Expected VM name to be 'test-vm', got '%s'", vmObj.Name)
 	}
-	if testCreatedVMObj.Spec.ImageName != "test-image" {
-		t.Errorf("Expected source VM image name 'test-image', got '%s'", testCreatedVMObj.Spec.ImageName)
+	if vmObj.Namespace != "test-namespace" {
+		t.Errorf("Expected VM namespace to be 'test-namespace', got '%s'", vmObj.Namespace)
 	}
-	if testCreatedVMObj.Spec.ClassName != "test-class" {
-		t.Errorf("Expected source VM class name 'test-class', got '%s'", testCreatedVMObj.Spec.ClassName)
+	if vmObj.Spec.ImageName != "test-image" {
+		t.Errorf("Expected VM image name to be 'test-image', got '%s'", vmObj.Spec.ImageName)
 	}
-	if testCreatedVMObj.Spec.StorageClass != "test-storage-class" {
-		t.Errorf("Expected source VM storage class 'test-storage-class', got '%s'", testCreatedVMObj.Spec.StorageClass)
+	if vmObj.Spec.ClassName != "test-class" {
+		t.Errorf("Expected VM class name to be 'test-class', got '%s'", vmObj.Spec.ClassName)
 	}
-	selectorLabelVal := testCreatedVMObj.Labels[supervisor.VMSelectorLabelKey]
+	if vmObj.Spec.StorageClass != "test-storage-class" {
+		t.Errorf("Expected VM storage class to be 'test-storage-class', got '%s'", vmObj.Spec.StorageClass)
+	}
+	selectorLabelVal := vmObj.Labels[supervisor.VMSelectorLabelKey]
 	if selectorLabelVal != "test-source" {
 		t.Errorf("Expected source VM label '%s' to be 'test-source', got '%s'", supervisor.VMSelectorLabelKey, selectorLabelVal)
 	}
 
-	// Check if the source VMService object is created as expected.
-	if testCreatedVMServiceObj == nil {
-		t.Fatal("source VMService object is nil")
+	// Check if the source VMService object is created with expected spec.
+	vmServiceObj := &vmopv1alpha1.VirtualMachineService{}
+	if err := kubeClient.Get(ctx, objKey, vmServiceObj); err != nil {
+		t.Fatalf("Failed to get the expected VMService object, err: %s", err.Error())
 	}
-	if testCreatedVMServiceObj.Name != "test-source" {
-		t.Errorf("Expected source VMService name 'test-source', got '%s'", testCreatedVMServiceObj.Name)
+	if vmServiceObj == nil {
+		t.Fatal("VMService object is nil")
 	}
-	if testCreatedVMServiceObj.Namespace != "test-ns" {
-		t.Errorf("Expected source VMService namespace 'test-ns', got '%s'", testCreatedVMServiceObj.Namespace)
+	if vmServiceObj.Name != "test-source" {
+		t.Errorf("Expected VMService name to be 'test-source', got '%s'", vmServiceObj.Name)
 	}
-	if testCreatedVMServiceObj.Spec.Type != "LoadBalancer" {
-		t.Errorf("Expected source VMService type 'LoadBalancer', got '%s'", testCreatedVMServiceObj.Spec.Type)
+	if vmServiceObj.Namespace != "test-namespace" {
+		t.Errorf("Expected VMService namespace to be 'test-namespace', got '%s'", vmServiceObj.Namespace)
 	}
-	ports := testCreatedVMServiceObj.Spec.Ports
+	if vmServiceObj.Spec.Type != "LoadBalancer" {
+		t.Errorf("Expected VMService type to be 'LoadBalancer', got '%s'", vmServiceObj.Spec.Type)
+	}
+	ports := vmServiceObj.Spec.Ports
 	if len(ports) == 0 || ports[0].Port != 123 || ports[0].TargetPort != 123 {
-		t.Errorf("Expected source VMService Port/TargetPort 123, got %v", ports)
+		t.Errorf("Expected VMService Port and TargetPort to be '123', got %v", ports)
 	}
-	selectorMap := testCreatedVMServiceObj.Spec.Selector
+	selectorMap := vmServiceObj.Spec.Selector
 	if val, ok := selectorMap[supervisor.VMSelectorLabelKey]; !ok || val != "test-source" {
-		t.Errorf("Expected source VMService selector '%s' to be 'test-source', got '%s'",
-			supervisor.VMSelectorLabelKey, val)
+		t.Errorf("Expected VMService selector '%s' to be 'test-source', got '%s'", supervisor.VMSelectorLabelKey, val)
 	}
 
 	// Check if all the required states are set correctly after the step is run.
@@ -239,17 +171,14 @@ func TestCreateSource_Run(t *testing.T) {
 
 	// Check the output lines from the step runs.
 	expectedOutput := []string{
-		"Creating source VM and its required objects in the connected Supervisor cluster...",
-		"Initializing a source K8s Secret object for providing VM metadata",
-		"Applying the source K8s Secret object with the kube CoreV1Client",
-		"Created the source K8s Secret object",
-		"Initializing a source VirtualMachine object for customization",
-		"Creating the source VirtualMachine object with the Kube REST client",
-		"Created the source VirtualMachine object",
-		"Initializing a source VMService object for setting up communication",
-		"Creating the VMService object with the Kube REST client",
-		"Created the source VMService object",
-		"Successfully created all required objects in the Supervisor cluster",
+		"Creating required source objects in Supervisor cluster...",
+		"Creating a K8s Secret object for providing source VM metadata",
+		"Successfully created the K8s Secret object",
+		"Creating a VirtualMachine object",
+		"Successfully created the VirtualMachine object",
+		"Creating a VirtualMachineService object for network connection",
+		"Successfully created the VirtualMachineService object",
+		"Finished creating all required source objects in Supervisor cluster",
 	}
 	checkOutputLines(t, testWriter, expectedOutput)
 }
@@ -257,54 +186,69 @@ func TestCreateSource_Run(t *testing.T) {
 func TestCreateSource_Cleanup(t *testing.T) {
 	// Test when 'keep_source' config is set to true (should skip cleanup).
 	config := &supervisor.CreateSourceConfig{
-		SourceName: "test-source",
 		KeepSource: true,
 	}
 	step := &supervisor.StepCreateSource{
-		Config:       config,
-		K8sNamespace: "test-ns",
+		Config: config,
 	}
 	testWriter := &bytes.Buffer{}
 	state := newBasicTestState(testWriter)
 	step.Cleanup(state)
 
-	expectedOutput := []string{"Skip cleaning up the previously created source objects as configured"}
+	expectedOutput := []string{"Skip cleaning up the source objects as specified in config"}
 	checkOutputLines(t, testWriter, expectedOutput)
 
 	// Test when 'keep_source' config is false (should delete all created source objects).
 	step.Config.KeepSource = false
 	step.Config.SourceName = "test-source"
-	step.KubeRestClient = mockRESTClientForCreateSourceCleanup(t, "test-source", "test-ns")
-	fakeSecretObj := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      step.Config.SourceName,
-			Namespace: step.K8sNamespace,
-		},
+	step.Namespace = "test-namespace"
+
+	sourceObjMeta := metav1.ObjectMeta{
+		Name:      "test-source",
+		Namespace: "test-namespace",
 	}
-	testKubeClientSet := kubefake.NewSimpleClientset(fakeSecretObj)
-	step.KubeClientSet = testKubeClientSet
+	kubeClient := newFakeKubeClient(
+		&vmopv1alpha1.VirtualMachine{
+			ObjectMeta: sourceObjMeta,
+		},
+		&vmopv1alpha1.VirtualMachineService{
+			ObjectMeta: sourceObjMeta,
+		},
+		&corev1.Secret{
+			ObjectMeta: sourceObjMeta,
+		},
+	)
+	step.KubeClient = kubeClient
+
 	state.Put(supervisor.StateKeyVMCreated, true)
 	state.Put(supervisor.StateKeyVMServiceCreated, true)
 	state.Put(supervisor.StateKeyVMMetadataSecretCreated, true)
 	step.Cleanup(state)
 
-	// Check if the Secret object got deleted from the Kube ClientSet.
-	// The other objects deletion is checked in the mock REST client.
-	_, err := testKubeClientSet.CoreV1().Secrets(step.K8sNamespace).
-		Get(context.TODO(), step.Config.SourceName, metav1.GetOptions{})
-	if !errors.IsNotFound(err) {
-		t.Fatal("Expected source Secret object to be deleted")
+	// Check if the source objects are deleted from the cluster.
+	ctx := context.TODO()
+	objKey := client.ObjectKey{
+		Name:      "test-source",
+		Namespace: "test-namespace",
+	}
+	if err := kubeClient.Get(ctx, objKey, &corev1.Secret{}); !errors.IsNotFound(err) {
+		t.Fatal("Expected the Secret object to be deleted")
+	}
+	if err := kubeClient.Get(ctx, objKey, &vmopv1alpha1.VirtualMachine{}); !errors.IsNotFound(err) {
+		t.Fatal("Expected the VirtualMachine object to be deleted")
+	}
+	if err := kubeClient.Get(ctx, objKey, &vmopv1alpha1.VirtualMachineService{}); !errors.IsNotFound(err) {
+		t.Fatal("Expected the VirtualMachineService object to be deleted")
 	}
 
 	// Check the output lines from the step runs.
 	expectedOutput = []string{
-		"Cleaning up the previously created source objects from Supervisor cluster...",
-		"Deleting the source VirtualMachineService object",
-		"Deleted the source VirtualMachineService object",
-		"Deleting the source VirtualMachine object",
-		"Deleted the source VirtualMachine object",
-		"Deleting source VMMetadata Secret object",
-		"Deleted the source VMMetadata Secret object",
+		"Deleting the VirtualMachineService object from Supervisor cluster",
+		"Successfully deleted the VirtualMachineService object",
+		"Deleting the VirtualMachine object from Supervisor cluster",
+		"Successfully deleted the VirtualMachine object",
+		"Deleting the K8s Secret object from Supervisor cluster",
+		"Successfully deleted the K8s Secret object",
 	}
 	checkOutputLines(t, testWriter, expectedOutput)
 }

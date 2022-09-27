@@ -45,7 +45,7 @@ func (b *Builder) Run(ctx context.Context, ui packersdk.Ui, hook packersdk.Hook)
 		&StepConnectSupervisor{
 			Config: &b.config.ConnectSupervisorConfig,
 		},
-		// Create a source VM and other related resources.
+		// Create a source VM and other related resources in Supervisor cluster.
 		&StepCreateSource{
 			Config:             &b.config.CreateSourceConfig,
 			CommunicatorConfig: &b.config.CommunicatorConfig,

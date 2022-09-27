@@ -8,42 +8,46 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hashicorp/packer-plugin-sdk/multistep"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	daynamicfake "k8s.io/client-go/dynamic/fake"
-	kubefake "k8s.io/client-go/kubernetes/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	"github.com/hashicorp/packer-plugin-sdk/multistep"
+	vmopv1alpha1 "github.com/vmware-tanzu/vm-operator-api/api/v1alpha1"
 
 	"github.com/hashicorp/packer-plugin-vsphere/builder/vsphere/supervisor"
 )
 
-func newUnstructuredVM(namespace, name, vmIP string) *unstructured.Unstructured {
-	return &unstructured.Unstructured{
-		Object: map[string]interface{}{
-			"apiVersion": "vmoperator.vmware.com/v1alpha1",
-			"kind":       "VirtualMachine",
-			"metadata": map[string]interface{}{
-				"namespace": namespace,
-				"name":      name,
-			},
+func newFakeKubeClient(initObjs ...client.Object) client.WithWatch {
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = vmopv1alpha1.AddToScheme(scheme)
+
+	return fake.NewClientBuilder().WithObjects(initObjs...).WithScheme(scheme).Build()
+}
+
+func newFakeVMObj(namespace, name, vmIP string) *vmopv1alpha1.VirtualMachine {
+	return &vmopv1alpha1.VirtualMachine{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      name,
 		},
 	}
 }
 
-func newFakeLBServiceObj(namespace, name, ip string) *corev1.Service {
-	return &corev1.Service{
+func newFakeVMServiceObj(namespace, name, ingressIP string) *vmopv1alpha1.VirtualMachineService {
+	return &vmopv1alpha1.VirtualMachineService{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
 			Namespace: namespace,
+			Name:      name,
 		},
-		Status: corev1.ServiceStatus{
-			LoadBalancer: corev1.LoadBalancerStatus{
-				Ingress: []corev1.LoadBalancerIngress{
+		Status: vmopv1alpha1.VirtualMachineServiceStatus{
+			LoadBalancer: vmopv1alpha1.LoadBalancerStatus{
+				Ingress: []vmopv1alpha1.LoadBalancerIngress{
 					{
-						IP: ip,
+						IP: ingressIP,
 					},
 				},
 			},
@@ -52,36 +56,36 @@ func newFakeLBServiceObj(namespace, name, ip string) *corev1.Service {
 }
 
 func TestWatchSource_Prepare(t *testing.T) {
-	// Check default values for optional config.
 	config := &supervisor.WatchSourceConfig{}
 	if errs := config.Prepare(); len(errs) != 0 {
 		t.Fatalf("Prepare should NOT fail: %v", errs)
 	}
-	if config.TimeoutSecond != supervisor.DefaultWatchTimeoutSec {
-		t.Fatalf("Default timeout should be %d, but got %d", supervisor.DefaultWatchTimeoutSec, config.TimeoutSecond)
+	if config.WatchTimeout != supervisor.DefaultWatchTimeout {
+		t.Fatalf("Default timeout should be %d, but got %d", supervisor.DefaultWatchTimeout, config.WatchTimeout)
 	}
 }
 
 func TestWatchSource_Run(t *testing.T) {
-	// Set up required config and state for running the step.
+	// Initialize the step with required configs.
 	config := &supervisor.WatchSourceConfig{
-		TimeoutSecond: 60,
+		WatchTimeout: 60,
 	}
 	step := &supervisor.StepWatchSource{
 		Config: config,
 	}
+
+	// Set up required state for running this step.
 	testNamespace := "test-ns"
 	testSourceName := "test-source"
 	testVMIP := "1.2.3.4"
 	testIngressIP := "5.6.7.8"
-	fakeLBServiceObj := newFakeLBServiceObj(testNamespace, testSourceName, testIngressIP)
-	fakeKubClientSet := kubefake.NewSimpleClientset(fakeLBServiceObj)
-	fakeVMUnstructured := newUnstructuredVM(testNamespace, testSourceName, testVMIP)
-	fakeDynamicClient := daynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), fakeVMUnstructured)
+	vmObj := newFakeVMObj(testNamespace, testSourceName, testVMIP)
+	vmServiceObj := newFakeVMServiceObj(testNamespace, testSourceName, testIngressIP)
+	kubeClient := newFakeKubeClient(vmObj, vmServiceObj)
+
 	testWriter := new(bytes.Buffer)
 	state := newBasicTestState(testWriter)
-	state.Put(supervisor.StateKeyKubeClientSet, fakeKubClientSet)
-	state.Put(supervisor.StateKeyKubeDynamicClient, fakeDynamicClient)
+	state.Put(supervisor.StateKeyKubeClient, kubeClient)
 	state.Put(supervisor.StateKeySupervisorNamespace, testNamespace)
 	state.Put(supervisor.StateKeySourceName, testSourceName)
 
@@ -102,29 +106,28 @@ func TestWatchSource_Run(t *testing.T) {
 		// Check if all the required states are set correctly after the step is run.
 		vmIP := state.Get(supervisor.StateKeyVMIP)
 		if vmIP != testVMIP {
-			t.Errorf("State '%s' should be '%s', but got '%s'", supervisor.StateKeyConnectIP, testVMIP, vmIP)
+			t.Errorf("State '%s' should be '%s', but got '%s'", supervisor.StateKeyCommunicateIP, testVMIP, vmIP)
 		}
-		ingressIP := state.Get(supervisor.StateKeyConnectIP)
-		if ingressIP != testIngressIP {
-			t.Errorf("State '%s' should be '%s', but got '%s'", supervisor.StateKeyConnectIP, testIngressIP, ingressIP)
+		connectIP := state.Get(supervisor.StateKeyCommunicateIP)
+		if connectIP != testIngressIP {
+			t.Errorf("State '%s' should be '%s', but got '%s'", supervisor.StateKeyCommunicateIP, testIngressIP, connectIP)
 		}
 
 		// Check the output lines from the step runs.
 		expectedOutput := []string{
-			"Waiting for the source VM to be up and ready...",
-			"Establishing a watch to the source VM object",
-			"Source VM is NOT powered on yet, continue watching",
-			"Source VM is powered on, waiting for an IP to be assigned",
+			"Waiting for the source VM to be powered-up and accessible...",
+			"Source VM is NOT powered-on yet, continue watching...",
+			"Source VM is powered-on, waiting for an IP to be assigned...",
 			fmt.Sprintf("Successfully get the source VM IP: %s", testVMIP),
-			"Getting source VM ingress IP from its K8s Service object",
+			"Getting source VM ingress IP from the VMService object",
 			fmt.Sprintf("Successfully get the source VM ingress IP: %s", testIngressIP),
-			"Source VM is now up and ready for customization",
+			"Source VM is now up and ready for customization in Supervisor cluster",
 		}
 		checkOutputLines(t, testWriter, expectedOutput)
 	}()
 
-	// Wait for the watch to be established before updating the fake VM resource below.
-	for i := 0; i < int(step.Config.TimeoutSecond); i++ {
+	// Wait for the watch to be established from Builder before updating the fake VM resource below.
+	for i := 0; i < int(step.Config.WatchTimeout); i++ {
 		supervisor.Mu.Lock()
 		if supervisor.IsWatchingVM {
 			supervisor.Mu.Unlock()
@@ -134,29 +137,19 @@ func TestWatchSource_Run(t *testing.T) {
 		time.Sleep(time.Second)
 	}
 
-	// Update the VM resource with powerOff => powerOn => VM IP assigned.
-	// In this way, we can test out the watch functionality and output messages.
+	// Update the VM resource in the order of poweredOff => poweredOn => IP assigned.
+	// In this way, we can test out the VM watch functionality and all output messages.
 	ctx := context.TODO()
-	opt := metav1.UpdateOptions{}
-	vmResource := schema.GroupVersionResource{
-		Group:    "vmoperator.vmware.com",
-		Version:  "v1alpha1",
-		Resource: "virtualmachines",
-	}
-	fakeVMUnstructured.Object["status"] = map[string]interface{}{
-		"powerState": "poweredOff",
-	}
-	fakeDynamicClient.Resource(vmResource).Namespace(testNamespace).Update(ctx, fakeVMUnstructured, opt)
+	opt := &client.UpdateOptions{}
 
-	fakeVMUnstructured.Object["status"] = map[string]interface{}{
-		"powerState": "poweredOn",
-	}
-	fakeDynamicClient.Resource(vmResource).Namespace(testNamespace).Update(ctx, fakeVMUnstructured, opt)
+	vmObj.Status.PowerState = vmopv1alpha1.VirtualMachinePoweredOff
+	kubeClient.Update(ctx, vmObj, opt)
 
-	fakeVMUnstructured.Object["status"] = map[string]interface{}{
-		"vmIp": testVMIP,
-	}
-	fakeDynamicClient.Resource(vmResource).Namespace(testNamespace).Update(ctx, fakeVMUnstructured, opt)
+	vmObj.Status.PowerState = vmopv1alpha1.VirtualMachinePoweredOn
+	kubeClient.Update(ctx, vmObj, opt)
+
+	vmObj.Status.VmIp = testVMIP
+	kubeClient.Update(ctx, vmObj, opt)
 
 	wg.Wait()
 }

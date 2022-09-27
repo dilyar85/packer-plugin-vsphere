@@ -5,13 +5,11 @@ package supervisor
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hashicorp/packer-plugin-sdk/communicator"
 	"github.com/hashicorp/packer-plugin-sdk/multistep"
@@ -22,15 +20,10 @@ const (
 	DefaultSourceName  = "packer-vsphere-supervisor-built-source"
 	VMSelectorLabelKey = DefaultSourceName + "-selector"
 
-	StateKeyKubeRestClient          = "kube_rest_client"
 	StateKeySourceName              = "source_name"
 	StateKeyVMCreated               = "vm_created"
 	StateKeyVMServiceCreated        = "vm_service_created"
 	StateKeyVMMetadataSecretCreated = "vm_metadata_secret_created"
-)
-
-var (
-	vmopAPIVersion = vmopv1alpha1.SchemeGroupVersion.String()
 )
 
 type CreateSourceConfig struct {
@@ -75,131 +68,126 @@ type StepCreateSource struct {
 	Config             *CreateSourceConfig
 	CommunicatorConfig *communicator.Config
 
-	K8sNamespace   string
-	KubeClientSet  kubernetes.Interface
-	KubeRestClient rest.Interface
+	Namespace  string
+	KubeClient client.Client
 }
 
-func (s *StepCreateSource) createVMService(ctx context.Context, logger *PackerLogger) error {
-	logger.Info("Initializing a source VMService object for setting up communication")
+func (s *StepCreateSource) Run(ctx context.Context, state multistep.StateBag) multistep.StepAction {
+	logger := state.Get("logger").(*PackerLogger)
+	logger.Info("Creating required source objects in Supervisor cluster...")
 
-	sshPort := int32(s.CommunicatorConfig.SSHPort)
-	vmService := vmopv1alpha1.VirtualMachineService{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: vmopAPIVersion,
-			Kind:       "VirtualMachineService",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      s.Config.SourceName,
-			Namespace: s.K8sNamespace,
-		},
-		Spec: vmopv1alpha1.VirtualMachineServiceSpec{
-			Type: vmopv1alpha1.VirtualMachineServiceTypeLoadBalancer,
-			Ports: []vmopv1alpha1.VirtualMachineServicePort{
-				{
-					Name:       "ssh",
-					Protocol:   "TCP",
-					Port:       sshPort,
-					TargetPort: sshPort,
-				},
-			},
-			Selector: map[string]string{
-				VMSelectorLabelKey: s.Config.SourceName,
-			},
-		},
+	var err error
+	defer func() {
+		if err != nil {
+			state.Put("error", err)
+		}
+	}()
+
+	if err = s.initStep(state); err != nil {
+		return multistep.ActionHalt
 	}
 
-	vmServiceJSON, err := json.Marshal(vmService)
-	if err != nil {
-		return err
+	if err = s.createVMMetadataSecret(ctx, logger); err != nil {
+		return multistep.ActionHalt
 	}
+	state.Put(StateKeyVMMetadataSecretCreated, true)
 
-	logger.Info("Creating the VMService object with the Kube REST client")
-	data, err := s.KubeRestClient.
-		Post().
-		AbsPath(fmt.Sprintf("/apis/%s", vmopAPIVersion)).
-		Namespace(s.K8sNamespace).
-		Resource("virtualmachineservices").
-		Body(vmServiceJSON).
-		DoRaw(ctx)
-
-	if err != nil {
-		logger.Error(
-			"Failed to create source VMService object\nResponse from K8s API-Server: %s",
-			string(data),
-		)
-		return err
+	if err = s.createVM(ctx, logger); err != nil {
+		return multistep.ActionHalt
 	}
+	state.Put(StateKeyVMCreated, true)
 
-	logger.Info("Created the source VMService object")
-	return nil
+	if err = s.createVMService(ctx, logger); err != nil {
+		return multistep.ActionHalt
+	}
+	state.Put(StateKeyVMServiceCreated, true)
+
+	// Store the source name to watch the resource in the next step.
+	state.Put(StateKeySourceName, s.Config.SourceName)
+
+	logger.Info("Finished creating all required source objects in Supervisor cluster")
+	return multistep.ActionContinue
 }
 
-func (s *StepCreateSource) createVM(ctx context.Context, logger *PackerLogger) error {
-	logger.Info("Initializing a source VirtualMachine object for customization")
+func (s *StepCreateSource) Cleanup(state multistep.StateBag) {
+	logger := state.Get("logger").(*PackerLogger)
 
-	vm := &vmopv1alpha1.VirtualMachine{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: vmopAPIVersion,
-			Kind:       "VirtualMachine",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      s.Config.SourceName,
-			Namespace: s.K8sNamespace,
-			Labels: map[string]string{
-				VMSelectorLabelKey: s.Config.SourceName,
-			},
-		},
-		Spec: vmopv1alpha1.VirtualMachineSpec{
-			ImageName:    s.Config.ImageName,
-			ClassName:    s.Config.ClassName,
-			StorageClass: s.Config.StorageClass,
-			PowerState:   vmopv1alpha1.VirtualMachinePoweredOn,
-			VmMetadata: &vmopv1alpha1.VirtualMachineMetadata{
-				SecretName: s.Config.SourceName,
-				Transport:  vmopv1alpha1.VirtualMachineMetadataCloudInitTransport,
-			},
-		},
+	if s.Config.KeepSource {
+		logger.Info("Skip cleaning up the source objects as specified in config")
+		return
 	}
 
-	// Set up network interface configs if provided by users.
-	if s.Config.NetworkType != "" || s.Config.NetworkName != "" {
-		vm.Spec.NetworkInterfaces = []vmopv1alpha1.VirtualMachineNetworkInterface{
-			{
-				NetworkType: s.Config.NetworkType,
-				NetworkName: s.Config.NetworkName,
-			},
+	ctx := context.Background()
+	sourceObjMeta := metav1.ObjectMeta{
+		Name:      s.Config.SourceName,
+		Namespace: s.Namespace,
+	}
+	if state.Get(StateKeyVMServiceCreated) == true {
+		logger.Info("Deleting the VirtualMachineService object from Supervisor cluster")
+		vmServiceObj := &vmopv1alpha1.VirtualMachineService{
+			ObjectMeta: sourceObjMeta,
+		}
+		if err := s.KubeClient.Delete(ctx, vmServiceObj); err != nil {
+			logger.Error("Failed to delete the VirtualMachineService object")
+		} else {
+			logger.Info("Successfully deleted the VirtualMachineService object")
 		}
 	}
 
-	vmJSON, err := json.Marshal(vm)
-	if err != nil {
+	if state.Get(StateKeyVMCreated) == true {
+		logger.Info("Deleting the VirtualMachine object from Supervisor cluster")
+		vmObj := &vmopv1alpha1.VirtualMachine{
+			ObjectMeta: sourceObjMeta,
+		}
+		if err := s.KubeClient.Delete(ctx, vmObj); err != nil {
+			logger.Error("Failed to delete the VirtualMachine object")
+		} else {
+			logger.Info("Successfully deleted the VirtualMachine object")
+		}
+	}
+
+	if state.Get(StateKeyVMMetadataSecretCreated) == true {
+		logger.Info("Deleting the K8s Secret object from Supervisor cluster")
+		secretObj := &corev1.Secret{
+			ObjectMeta: sourceObjMeta,
+		}
+		err := s.KubeClient.Delete(ctx, secretObj)
+		if err != nil {
+			logger.Error("Failed to delete the K8s Secret object: %s", err)
+		} else {
+			logger.Info("Successfully deleted the K8s Secret object")
+		}
+	}
+}
+
+func (s *StepCreateSource) initStep(state multistep.StateBag) error {
+	if err := CheckRequiredStates(state,
+		StateKeyKubeClient,
+		StateKeySupervisorNamespace,
+	); err != nil {
 		return err
 	}
 
-	logger.Info("Creating the source VirtualMachine object with the Kube REST client")
-	data, err := s.KubeRestClient.
-		Post().
-		AbsPath(fmt.Sprintf("/apis/%s", vmopAPIVersion)).
-		Namespace(s.K8sNamespace).
-		Resource("virtualmachines").
-		Body(vmJSON).
-		DoRaw(ctx)
+	var (
+		ok         bool
+		namespace  string
+		kubeClient client.Client
+	)
 
-	if err != nil {
-		logger.Error(
-			"Failed to create source VirtualMachine object\nResponse from K8s API-Server: %s",
-			string(data),
-		)
-		return err
+	if namespace, ok = state.Get(StateKeySupervisorNamespace).(string); !ok {
+		return fmt.Errorf("failed to cast '%s' from state bag as type string", StateKeySupervisorNamespace)
+	}
+	if kubeClient, ok = state.Get(StateKeyKubeClient).(client.Client); !ok {
+		return fmt.Errorf("failed to cast '%s' from state bag as type client.Client", StateKeyKubeClient)
 	}
 
-	logger.Info("Created the source VirtualMachine object")
+	s.Namespace = namespace
+	s.KubeClient = kubeClient
 	return nil
 }
 
 func (s *StepCreateSource) createVMMetadataSecret(ctx context.Context, logger *PackerLogger) error {
-	logger.Info("Initializing a source K8s Secret object for providing VM metadata")
+	logger.Info("Creating a K8s Secret object for providing source VM metadata")
 	cloudInitFmt := `#cloud-config
 users:
   - name: %s
@@ -220,127 +208,97 @@ ssh_pwauth: true
 		"user-data": cloudInitStr,
 	}
 	kubeSecret := &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "v1",
-			Kind:       "Secret",
-		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      s.Config.SourceName,
-			Namespace: s.K8sNamespace,
+			Namespace: s.Namespace,
 		},
 		StringData: stringData,
 	}
 
-	logger.Info("Applying the source K8s Secret object with the kube CoreV1Client")
-	_, err := s.KubeClientSet.CoreV1().Secrets(s.K8sNamespace).Create(ctx, kubeSecret, metav1.CreateOptions{})
+	err := s.KubeClient.Create(ctx, kubeSecret)
 	if err != nil {
-		logger.Error("Failed to create source Secret object")
+		logger.Error("Failed to create the K8s Secret object")
 		return err
 	}
 
-	logger.Info("Created the source K8s Secret object")
+	logger.Info("Successfully created the K8s Secret object")
 	return nil
 }
 
-func (s *StepCreateSource) Run(ctx context.Context, state multistep.StateBag) multistep.StepAction {
-	logger := state.Get("logger").(*PackerLogger)
-	logger.Info("Creating source VM and its required objects in the connected Supervisor cluster...")
+func (s *StepCreateSource) createVM(ctx context.Context, logger *PackerLogger) error {
+	logger.Info("Creating a VirtualMachine object")
 
-	var err error
-	defer func() {
-		if err != nil {
-			state.Put("error", err)
+	vm := &vmopv1alpha1.VirtualMachine{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      s.Config.SourceName,
+			Namespace: s.Namespace,
+			Labels: map[string]string{
+				VMSelectorLabelKey: s.Config.SourceName,
+			},
+		},
+		Spec: vmopv1alpha1.VirtualMachineSpec{
+			ImageName:    s.Config.ImageName,
+			ClassName:    s.Config.ClassName,
+			StorageClass: s.Config.StorageClass,
+			PowerState:   vmopv1alpha1.VirtualMachinePoweredOn,
+			VmMetadata: &vmopv1alpha1.VirtualMachineMetadata{
+				SecretName: s.Config.SourceName,
+				Transport:  vmopv1alpha1.VirtualMachineMetadataCloudInitTransport,
+			},
+		},
+	}
+
+	// Set up network interface configs if provided in configs.
+	if s.Config.NetworkType != "" || s.Config.NetworkName != "" {
+		vm.Spec.NetworkInterfaces = []vmopv1alpha1.VirtualMachineNetworkInterface{
+			{
+				NetworkType: s.Config.NetworkType,
+				NetworkName: s.Config.NetworkName,
+			},
 		}
-	}()
-
-	if err = CheckRequiredStates(state,
-		StateKeyKubeClientSet,
-		StateKeySupervisorNamespace,
-	); err != nil {
-		return multistep.ActionHalt
 	}
 
-	s.KubeClientSet = state.Get(StateKeyKubeClientSet).(kubernetes.Interface)
-	s.K8sNamespace = state.Get(StateKeySupervisorNamespace).(string)
-	// StateKeyKubeRestClient will be set separately in testing.
-	if val, ok := state.GetOk(StateKeyKubeRestClient); ok {
-		s.KubeRestClient = val.(rest.Interface)
-	} else {
-		s.KubeRestClient = s.KubeClientSet.CoreV1().RESTClient()
+	err := s.KubeClient.Create(ctx, vm)
+	if err != nil {
+		logger.Error("Failed to create the VirtualMachine object")
+		return err
 	}
 
-	if err = s.createVMMetadataSecret(ctx, logger); err != nil {
-		return multistep.ActionHalt
-	}
-	state.Put(StateKeyVMMetadataSecretCreated, true)
-
-	if err = s.createVM(ctx, logger); err != nil {
-		return multistep.ActionHalt
-	}
-	state.Put(StateKeyVMCreated, true)
-
-	if err = s.createVMService(ctx, logger); err != nil {
-		return multistep.ActionHalt
-	}
-	state.Put(StateKeyVMServiceCreated, true)
-
-	// Storing the created source info to be used in the next step.
-	state.Put(StateKeySourceName, s.Config.SourceName)
-
-	logger.Info("Successfully created all required objects in the Supervisor cluster")
-	return multistep.ActionContinue
+	logger.Info("Successfully created the VirtualMachine object")
+	return nil
 }
 
-func (s *StepCreateSource) Cleanup(state multistep.StateBag) {
-	logger := state.Get("logger").(*PackerLogger)
+func (s *StepCreateSource) createVMService(ctx context.Context, logger *PackerLogger) error {
+	logger.Info("Creating a VirtualMachineService object for network connection")
 
-	if s.Config.KeepSource {
-		logger.Info("Skip cleaning up the previously created source objects as configured")
-		return
+	sshPort := int32(s.CommunicatorConfig.SSHPort)
+	vmServiceObj := &vmopv1alpha1.VirtualMachineService{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      s.Config.SourceName,
+			Namespace: s.Namespace,
+		},
+		Spec: vmopv1alpha1.VirtualMachineServiceSpec{
+			Type: vmopv1alpha1.VirtualMachineServiceTypeLoadBalancer,
+			Ports: []vmopv1alpha1.VirtualMachineServicePort{
+				{
+					Name:       "ssh",
+					Protocol:   "TCP",
+					Port:       sshPort,
+					TargetPort: sshPort,
+				},
+			},
+			Selector: map[string]string{
+				VMSelectorLabelKey: s.Config.SourceName,
+			},
+		},
 	}
 
-	logger.Info("Cleaning up the previously created source objects from Supervisor cluster...")
-	ctx := context.Background()
-	if state.Get(StateKeyVMServiceCreated) == true {
-		logger.Info("Deleting the source VirtualMachineService object")
-		data, err := s.KubeRestClient.
-			Delete().
-			AbsPath(fmt.Sprintf("/apis/%s", vmopAPIVersion)).
-			Namespace(s.K8sNamespace).
-			Resource("virtualmachineservices").
-			Name(s.Config.SourceName).
-			DoRaw(ctx)
-		if err != nil {
-			logger.Error("Failed to delete source VirtualMachineService object: %s", string(data))
-		} else {
-			logger.Info("Deleted the source VirtualMachineService object")
-		}
+	err := s.KubeClient.Create(ctx, vmServiceObj)
+	if err != nil {
+		logger.Error("Failed to create the VirtualMachineService object")
+		return err
 	}
 
-	if state.Get(StateKeyVMCreated) == true {
-		logger.Info("Deleting the source VirtualMachine object")
-		data, err := s.KubeRestClient.
-			Delete().
-			AbsPath(fmt.Sprintf("/apis/%s", vmopAPIVersion)).
-			Namespace(s.K8sNamespace).
-			Resource("virtualmachines").
-			Name(s.Config.SourceName).
-			DoRaw(ctx)
-		if err != nil {
-			logger.Error("Failed to delete source VirtualMachine object: %v", string(data))
-		} else {
-			logger.Info("Deleted the source VirtualMachine object")
-		}
-	}
-
-	if state.Get(StateKeyVMMetadataSecretCreated) == true {
-		logger.Info("Deleting source VMMetadata Secret object")
-		err := s.KubeClientSet.CoreV1().Secrets(s.K8sNamespace).
-			Delete(ctx, s.Config.SourceName, metav1.DeleteOptions{})
-		if err != nil {
-			logger.Error("Failed to delete source VMMetadata K8s Secret object: %s", err)
-		} else {
-			logger.Info("Deleted the source VMMetadata Secret object")
-		}
-	}
+	logger.Info("Successfully created the VirtualMachineService object")
+	return nil
 }

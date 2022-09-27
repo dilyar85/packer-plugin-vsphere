@@ -2,6 +2,7 @@ package supervisor_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/hashicorp/packer-plugin-vsphere/builder/vsphere/supervisor"
 )
@@ -16,7 +17,7 @@ func getCompleteConfig() map[string]interface{} {
 		"source_name":              "test-source",
 		"network_type":             "test-networkType",
 		"network_name":             "test-networkName",
-		"watch_source_timeout_sec": int64(60),
+		"watch_source_timeout_sec": time.Duration(60 * time.Second),
 		"keep_source":              true,
 	}
 }
@@ -104,8 +105,8 @@ func TestSupervisorConfig_Values(t *testing.T) {
 	if c.NetworkName != providedConfigs["network_name"] {
 		t.Errorf("expected network_name to be: %s, got: %s", providedConfigs["network_name"], c.NetworkName)
 	}
-	if c.TimeoutSecond != providedConfigs["watch_source_timeout_sec"].(int64) {
-		t.Errorf("expected watch_source_timeout_sec to be: %d, got: %d", providedConfigs["watch_source_timeout_sec"].(int64), c.TimeoutSecond)
+	if c.WatchTimeout != providedConfigs["watch_source_timeout_sec"].(time.Duration) {
+		t.Errorf("expected watch_source_timeout_sec to be: %d, got: %d", providedConfigs["watch_source_timeout_sec"].(int64), c.WatchTimeout)
 	}
 	if c.KeepSource != providedConfigs["keep_source"].(bool) {
 		t.Errorf("expected keep_source to be: true, got: false")

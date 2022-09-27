@@ -7,21 +7,20 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
+	"k8s.io/apimachinery/pkg/fields"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hashicorp/packer-plugin-sdk/multistep"
+	vmopv1alpha1 "github.com/vmware-tanzu/vm-operator-api/api/v1alpha1"
 )
 
 const (
-	DefaultWatchTimeoutSec = 600
+	DefaultWatchTimeout = time.Duration(600 * time.Second)
 
-	StateKeyVMIP      = "vm_ip"
-	StateKeyConnectIP = "ip"
+	StateKeyVMIP          = "vm_ip"
+	StateKeyCommunicateIP = "ip"
 )
 
 var (
@@ -31,12 +30,12 @@ var (
 
 type WatchSourceConfig struct {
 	// The timeout in seconds to wait for the source VM to be ready. Defaults to `600`.
-	TimeoutSecond int64 `mapstructure:"watch_source_timeout_sec"`
+	WatchTimeout time.Duration `mapstructure:"watch_source_timeout_sec"`
 }
 
 func (c *WatchSourceConfig) Prepare() []error {
-	if c.TimeoutSecond == 0 {
-		c.TimeoutSecond = DefaultWatchTimeoutSec
+	if c.WatchTimeout == 0 {
+		c.WatchTimeout = DefaultWatchTimeout
 	}
 
 	return nil
@@ -44,87 +43,14 @@ func (c *WatchSourceConfig) Prepare() []error {
 
 type StepWatchSource struct {
 	Config *WatchSourceConfig
-}
 
-func (s *StepWatchSource) getVMIngressIP(
-	ctx context.Context, logger *PackerLogger, kubeClient kubernetes.Interface, name, ns string) (string, error) {
-	logger.Info("Getting source VM ingress IP from its K8s Service object")
-
-	svc, err := kubeClient.CoreV1().Services(ns).Get(ctx, name, metav1.GetOptions{})
-	if err != nil {
-		logger.Error("Failed to get source VM's Service object")
-		return "", err
-	}
-
-	ingress := svc.Status.LoadBalancer.Ingress
-	if len(ingress) == 0 || ingress[0].IP == "" {
-		return "", fmt.Errorf("source VM's Service ingress IP is empty")
-	}
-
-	logger.Info("Successfully get the source VM ingress IP: %s", ingress[0].IP)
-	return ingress[0].IP, nil
-}
-
-func (s *StepWatchSource) waitForVMReady(
-	ctx context.Context, logger *PackerLogger, dynamicClient dynamic.Interface, name, ns string) (string, error) {
-	logger.Info("Establishing a watch to the source VM object")
-
-	vmWatch, err := dynamicClient.Resource(schema.GroupVersionResource{
-		Group:    "vmoperator.vmware.com",
-		Version:  "v1alpha1",
-		Resource: "virtualmachines",
-	}).Namespace(ns).Watch(ctx, metav1.ListOptions{
-		FieldSelector:  fmt.Sprintf("metadata.name=%s", name),
-		TimeoutSeconds: &s.Config.TimeoutSecond,
-	})
-
-	if err != nil {
-		logger.Error("Failed to establish watch for source VM object")
-		return "", err
-	}
-
-	// IsWatchingVM is used when mocking the watch process in tests.
-	Mu.Lock()
-	IsWatchingVM = true
-	Mu.Unlock()
-
-	for {
-		select {
-		case event := <-vmWatch.ResultChan():
-			if event.Object == nil {
-				return "", fmt.Errorf("timed out watching for source VM object to be ready")
-			}
-
-			obj, ok := event.Object.(*unstructured.Unstructured)
-			if !ok {
-				return "", fmt.Errorf("failed to convert the watch event object to unstructured")
-			}
-
-			vmIP, found, err := unstructured.NestedString(obj.Object, "status", "vmIp")
-			if err != nil {
-				logger.Error("Failed to get the source VM IP")
-				return "", err
-			}
-
-			if found && vmIP != "" {
-				logger.Info("Successfully get the source VM IP: %s", vmIP)
-				return vmIP, nil
-			}
-
-			// VM is not ready. Provide additional logging based on the current VM power state.
-			vmPowerState, _, _ := unstructured.NestedString(obj.Object, "status", "powerState")
-			if vmPowerState == "poweredOn" {
-				logger.Info("Source VM is powered on, waiting for an IP to be assigned")
-			} else {
-				logger.Info("Source VM is NOT powered on yet, continue watching")
-			}
-		}
-	}
+	SourceName, Namespace string
+	KubeWatchClient       client.WithWatch
 }
 
 func (s *StepWatchSource) Run(ctx context.Context, state multistep.StateBag) multistep.StepAction {
 	logger := state.Get("logger").(*PackerLogger)
-	logger.Info("Waiting for the source VM to be up and ready...")
+	logger.Info("Waiting for the source VM to be powered-up and accessible...")
 
 	var err error
 	defer func() {
@@ -133,35 +59,135 @@ func (s *StepWatchSource) Run(ctx context.Context, state multistep.StateBag) mul
 		}
 	}()
 
-	if err = CheckRequiredStates(state,
-		StateKeyKubeClientSet,
-		// StateKeyKubeDynamicClient,
-		StateKeySupervisorNamespace,
-		StateKeySourceName,
-	); err != nil {
+	if err = s.initStep(state); err != nil {
 		return multistep.ActionHalt
 	}
 
-	kubeClientSet := state.Get(StateKeyKubeClientSet).(kubernetes.Interface)
-	dynamicClient := state.Get(StateKeyKubeDynamicClient).(dynamic.Interface)
-	namespace := state.Get(StateKeySupervisorNamespace).(string)
-	sourceName := state.Get(StateKeySourceName).(string)
-
 	// Wait for the source VM to power up and have an IP assigned.
-	vmIP, err := s.waitForVMReady(ctx, logger, dynamicClient, sourceName, namespace)
+	vmIP, err := s.waitForVMReady(ctx, logger)
 	if err != nil {
 		return multistep.ActionHalt
 	}
 	state.Put(StateKeyVMIP, vmIP)
 
-	ingressIP, err := s.getVMIngressIP(ctx, logger, kubeClientSet, sourceName, namespace)
+	ingressIP, err := s.getVMIngressIP(ctx, logger)
 	if err != nil {
 		return multistep.ActionHalt
 	}
-	state.Put(StateKeyConnectIP, ingressIP)
+	state.Put(StateKeyCommunicateIP, ingressIP)
 
-	logger.Info("Source VM is now up and ready for customization")
+	logger.Info("Source VM is now up and ready for customization in Supervisor cluster")
 	return multistep.ActionContinue
 }
 
 func (s *StepWatchSource) Cleanup(state multistep.StateBag) {}
+
+func (s *StepWatchSource) initStep(state multistep.StateBag) error {
+	if err := CheckRequiredStates(state,
+		StateKeyKubeClient,
+		StateKeySupervisorNamespace,
+		StateKeySourceName,
+	); err != nil {
+		return err
+	}
+
+	var (
+		ok                    bool
+		sourceName, namespace string
+		kubeWatchClient       client.WithWatch
+	)
+
+	if sourceName, ok = state.Get(StateKeySourceName).(string); !ok {
+		return fmt.Errorf("failed to cast %s to type string", StateKeySourceName)
+	}
+	if namespace, ok = state.Get(StateKeySupervisorNamespace).(string); !ok {
+		return fmt.Errorf("failed to cast %s to type string", StateKeySupervisorNamespace)
+	}
+	if kubeWatchClient, ok = state.Get(StateKeyKubeClient).(client.WithWatch); !ok {
+		return fmt.Errorf("failed to cast %s to type client.WithWatch", StateKeyKubeClient)
+	}
+
+	s.SourceName = sourceName
+	s.Namespace = namespace
+	s.KubeWatchClient = kubeWatchClient
+	return nil
+}
+
+func (s *StepWatchSource) waitForVMReady(ctx context.Context, logger *PackerLogger) (string, error) {
+	vmWatch, err := s.KubeWatchClient.Watch(ctx, &vmopv1alpha1.VirtualMachineList{}, &client.ListOptions{
+		FieldSelector: fields.OneTermEqualSelector("metadata.name", s.SourceName),
+		Namespace:     s.Namespace,
+	})
+
+	if err != nil {
+		logger.Error("Failed to watch the VM object in Supervisor cluster")
+		return "", err
+	}
+
+	defer func() {
+		vmWatch.Stop()
+
+		Mu.Lock()
+		IsWatchingVM = false // This is used when mocking the watch process in test.
+		Mu.Unlock()
+	}()
+
+	Mu.Lock()
+	IsWatchingVM = true
+	Mu.Unlock()
+
+	for {
+		select {
+		case event := <-vmWatch.ResultChan():
+			if event.Object == nil {
+				return "", fmt.Errorf("watch event object is nil")
+			}
+
+			vmObj, ok := event.Object.(*vmopv1alpha1.VirtualMachine)
+			if !ok {
+				return "", fmt.Errorf("failed to convert the watch event object")
+			}
+
+			vmIP := vmObj.Status.VmIp
+			if vmIP != "" {
+				logger.Info("Successfully get the source VM IP: %s", vmIP)
+				return vmIP, nil
+			}
+
+			// If the code reaches here, then the VM object is not ready yet.
+			// Provide additional logging based on the current VM power state.
+			vmPowerState := vmObj.Status.PowerState
+			if vmPowerState == vmopv1alpha1.VirtualMachinePoweredOn {
+				logger.Info("Source VM is powered-on, waiting for an IP to be assigned...")
+			} else {
+				logger.Info("Source VM is NOT powered-on yet, continue watching...")
+			}
+
+		case <-time.After(s.Config.WatchTimeout * time.Second):
+			return "", fmt.Errorf("timed out watching for source VM object to be ready")
+		}
+	}
+}
+
+func (s *StepWatchSource) getVMIngressIP(ctx context.Context, logger *PackerLogger) (string, error) {
+	logger.Info("Getting source VM ingress IP from the VMService object")
+
+	vmServiceObj := &vmopv1alpha1.VirtualMachineService{}
+	err := s.KubeWatchClient.Get(ctx, client.ObjectKey{
+		Namespace: s.Namespace,
+		Name:      s.SourceName,
+	}, vmServiceObj)
+
+	if err != nil {
+		logger.Error("Failed to get the VMService object in Supervisor cluster")
+		return "", err
+	}
+
+	ingress := vmServiceObj.Status.LoadBalancer.Ingress
+	if len(ingress) == 0 || ingress[0].IP == "" {
+		return "", fmt.Errorf("VMService object's ingress IP is empty")
+	}
+
+	logger.Info("Successfully get the source VM ingress IP: %s", ingress[0].IP)
+	return ingress[0].IP, nil
+}

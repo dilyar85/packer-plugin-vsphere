@@ -10,40 +10,10 @@ import (
 
 	"github.com/hashicorp/packer-plugin-sdk/multistep"
 	"k8s.io/client-go/tools/clientcmd"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hashicorp/packer-plugin-vsphere/builder/vsphere/supervisor"
 )
-
-func getTestKubeconfigFile(t *testing.T, namespace string) *os.File {
-	fakeKubeconfigDataFmt := `
-apiVersion: v1
-clusters:
-- cluster:
-    server: test-server
-  name: test-cluster
-contexts:
-- context:
-    cluster: test-cluster
-    namespace: %s
-  name: test-context
-current-context: test-context
-kind: Config
-`
-	// The directory will be automatically removed when the test ends.
-	tmpDir := t.TempDir()
-	fakeFile, err := os.CreateTemp(tmpDir, "fake-test-file")
-	if err != nil {
-		t.Fatalf("Failed to create a fake kubeconfig file: %s", err)
-	}
-	defer fakeFile.Close()
-
-	_, err = io.WriteString(fakeFile, fmt.Sprintf(fakeKubeconfigDataFmt, namespace))
-	if err != nil {
-		t.Fatalf("Failed to write to the fake kubeconfig file: %s", err)
-	}
-
-	return fakeFile
-}
 
 func TestConnectSupervisor_Prepare(t *testing.T) {
 	// Check kubeconfig path when the KUBECONFIG env var is set.
@@ -80,8 +50,9 @@ func TestConnectSupervisor_Prepare(t *testing.T) {
 	}
 }
 
+// FIXME: This test is failing because of the invalid rest.config created from the test kubeconfig file.
 func TestConnectSupervisor_Run(t *testing.T) {
-	// Set up required config and state for running the step.
+	// Set up required config for running the step.
 	testFile := getTestKubeconfigFile(t, "test-ns")
 	config := &supervisor.ConnectSupervisorConfig{
 		KubeconfigPath:      testFile.Name(),
@@ -93,6 +64,15 @@ func TestConnectSupervisor_Run(t *testing.T) {
 	testWriter := new(bytes.Buffer)
 	state := newBasicTestState(testWriter)
 
+	// Mock the InitKubeClientFunc as client.Client or client.WithWatch requires a valid kubeconfig.
+	originalFunc := supervisor.InitKubeClientFunc
+	defer func() {
+		supervisor.InitKubeClientFunc = originalFunc
+	}()
+	supervisor.InitKubeClientFunc = func(s *supervisor.StepConnectSupervisor) (client.WithWatch, error) {
+		return client.WithWatch(nil), nil
+	}
+
 	action := step.Run(context.TODO(), state)
 	if action == multistep.ActionHalt {
 		if rawErr, ok := state.GetOk("error"); ok {
@@ -103,8 +83,7 @@ func TestConnectSupervisor_Run(t *testing.T) {
 
 	// Check if all the required states are set after the step is run.
 	if err := supervisor.CheckRequiredStates(state,
-		supervisor.StateKeyKubeClientSet,
-		supervisor.StateKeyKubeDynamicClient,
+		supervisor.StateKeyKubeClient,
 		supervisor.StateKeySupervisorNamespace,
 	); err != nil {
 		t.Fatalf("Missing required states: %s", err)
@@ -122,4 +101,35 @@ func TestConnectSupervisor_Run(t *testing.T) {
 		"Successfully connected to Supervisor cluster",
 	}
 	checkOutputLines(t, testWriter, expectedLines)
+}
+
+func getTestKubeconfigFile(t *testing.T, namespace string) *os.File {
+	fakeKubeconfigDataFmt := `
+apiVersion: v1
+clusters:
+- cluster:
+    server: test-server
+  name: test-cluster
+contexts:
+- context:
+    cluster: test-cluster
+    namespace: %s
+  name: test-context
+current-context: test-context
+kind: Config
+`
+	// The directory will be automatically removed when the test ends.
+	tmpDir := t.TempDir()
+	fakeFile, err := os.CreateTemp(tmpDir, "fake-test-file")
+	if err != nil {
+		t.Fatalf("Failed to create a fake kubeconfig file: %s", err)
+	}
+	defer fakeFile.Close()
+
+	_, err = io.WriteString(fakeFile, fmt.Sprintf(fakeKubeconfigDataFmt, namespace))
+	if err != nil {
+		t.Fatalf("Failed to write to the fake kubeconfig file: %s", err)
+	}
+
+	return fakeFile
 }

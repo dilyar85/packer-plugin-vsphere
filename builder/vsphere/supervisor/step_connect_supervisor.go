@@ -7,18 +7,19 @@ import (
 	"context"
 	"os"
 
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/kubernetes"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hashicorp/packer-plugin-sdk/multistep"
 	"github.com/pkg/errors"
+	vmopv1alpha1 "github.com/vmware-tanzu/vm-operator-api/api/v1alpha1"
 )
 
 const (
 	StateKeySupervisorNamespace = "supervisor_namespace"
-	StateKeyKubeClientSet       = "kube_client_set"
-	StateKeyKubeDynamicClient   = "kube_dynamic_client"
+	StateKeyKubeClient          = "kube_client"
 )
 
 type ConnectSupervisorConfig struct {
@@ -63,36 +64,17 @@ type StepConnectSupervisor struct {
 	Config *ConnectSupervisorConfig
 }
 
-func (s *StepConnectSupervisor) getKubeClients() (*kubernetes.Clientset, dynamic.Interface, error) {
-	config, err := clientcmd.BuildConfigFromFlags("", s.Config.KubeconfigPath)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	clientSet, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	dynamicClient, err := dynamic.NewForConfig(config)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return clientSet, dynamicClient, nil
-}
-
 func (s *StepConnectSupervisor) Run(ctx context.Context, state multistep.StateBag) multistep.StepAction {
 	logger := state.Get("logger").(*PackerLogger)
 	logger.Info("Connecting to Supervisor cluster...")
 
-	clientSet, dynamicClient, err := s.getKubeClients()
+	kubeClient, err := InitKubeClientFunc(s)
 	if err != nil {
 		state.Put("error", err)
 		return multistep.ActionHalt
 	}
-	state.Put(StateKeyKubeClientSet, clientSet)
-	state.Put(StateKeyKubeDynamicClient, dynamicClient)
+
+	state.Put(StateKeyKubeClient, kubeClient)
 	state.Put(StateKeySupervisorNamespace, s.Config.SupervisorNamespace)
 
 	logger.Info("Successfully connected to Supervisor cluster")
@@ -100,3 +82,20 @@ func (s *StepConnectSupervisor) Run(ctx context.Context, state multistep.StateBa
 }
 
 func (s *StepConnectSupervisor) Cleanup(multistep.StateBag) {}
+
+// Setting this function as a variable so that it can be mocked in test.
+// Either client.Client or client.WithWatch requires a valid kubeconfig to be initialized.
+var InitKubeClientFunc = func(s *StepConnectSupervisor) (client.WithWatch, error) {
+	config, err := clientcmd.BuildConfigFromFlags("", s.Config.KubeconfigPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// The Supervisor builder will interact with both vmoperator and corev1 resources.
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = vmopv1alpha1.AddToScheme(scheme)
+
+	// Initialize a WithWatch client because we need to watch the status of the source VM.
+	return client.NewWithWatch(config, client.Options{Scheme: scheme})
+}
