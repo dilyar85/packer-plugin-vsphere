@@ -10,7 +10,7 @@ import (
 // FlatWatchSourceConfig is an auto-generated flat version of WatchSourceConfig.
 // Where the contents of a field with a `mapstructure:,squash` tag are bubbled up.
 type FlatWatchSourceConfig struct {
-	TimeoutSecond *int64 `mapstructure:"watch_source_timeout_sec" cty:"watch_source_timeout_sec" hcl:"watch_source_timeout_sec"`
+	WatchSourceTimeoutSec *int `mapstructure:"watch_source_timeout_sec" cty:"watch_source_timeout_sec" hcl:"watch_source_timeout_sec"`
 }
 
 // FlatMapstructure returns a new FlatWatchSourceConfig.

@@ -60,15 +60,15 @@ func TestWatchSource_Prepare(t *testing.T) {
 	if errs := config.Prepare(); len(errs) != 0 {
 		t.Fatalf("Prepare should NOT fail: %v", errs)
 	}
-	if config.WatchTimeout != supervisor.DefaultWatchTimeout {
-		t.Fatalf("Default timeout should be %d, but got %d", supervisor.DefaultWatchTimeout, config.WatchTimeout)
+	if config.WatchSourceTimeoutSec != supervisor.DefaultWatchTimeoutSec {
+		t.Fatalf("Default timeout should be %d, but got %d", supervisor.DefaultWatchTimeoutSec, config.WatchSourceTimeoutSec)
 	}
 }
 
 func TestWatchSource_Run(t *testing.T) {
 	// Initialize the step with required configs.
 	config := &supervisor.WatchSourceConfig{
-		WatchTimeout: 60,
+		WatchSourceTimeoutSec: 60,
 	}
 	step := &supervisor.StepWatchSource{
 		Config: config,
@@ -127,7 +127,7 @@ func TestWatchSource_Run(t *testing.T) {
 	}()
 
 	// Wait for the watch to be established from Builder before updating the fake VM resource below.
-	for i := 0; i < int(step.Config.WatchTimeout); i++ {
+	for i := 0; i < int(step.Config.WatchSourceTimeoutSec); i++ {
 		supervisor.Mu.Lock()
 		if supervisor.IsWatchingVM {
 			supervisor.Mu.Unlock()

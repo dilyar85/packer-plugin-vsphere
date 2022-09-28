@@ -76,7 +76,7 @@ type FlatConfig struct {
 	NetworkType               *string           `mapstructure:"network_type" cty:"network_type" hcl:"network_type"`
 	NetworkName               *string           `mapstructure:"network_name" cty:"network_name" hcl:"network_name"`
 	KeepSource                *bool             `mapstructure:"keep_source" cty:"keep_source" hcl:"keep_source"`
-	TimeoutSecond             *int64            `mapstructure:"watch_source_timeout_sec" cty:"watch_source_timeout_sec" hcl:"watch_source_timeout_sec"`
+	WatchSourceTimeoutSec     *int              `mapstructure:"watch_source_timeout_sec" cty:"watch_source_timeout_sec" hcl:"watch_source_timeout_sec"`
 }
 
 // FlatMapstructure returns a new FlatConfig.

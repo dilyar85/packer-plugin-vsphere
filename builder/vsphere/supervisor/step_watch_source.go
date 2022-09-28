@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	DefaultWatchTimeout = time.Duration(600 * time.Second)
+	DefaultWatchTimeoutSec = 600
 
 	StateKeyVMIP          = "vm_ip"
 	StateKeyCommunicateIP = "ip"
@@ -30,12 +30,12 @@ var (
 
 type WatchSourceConfig struct {
 	// The timeout in seconds to wait for the source VM to be ready. Defaults to `600`.
-	WatchTimeout time.Duration `mapstructure:"watch_source_timeout_sec"`
+	WatchSourceTimeoutSec int `mapstructure:"watch_source_timeout_sec"`
 }
 
 func (c *WatchSourceConfig) Prepare() []error {
-	if c.WatchTimeout == 0 {
-		c.WatchTimeout = DefaultWatchTimeout
+	if c.WatchSourceTimeoutSec == 0 {
+		c.WatchSourceTimeoutSec = DefaultWatchTimeoutSec
 	}
 
 	return nil
@@ -163,7 +163,7 @@ func (s *StepWatchSource) waitForVMReady(ctx context.Context, logger *PackerLogg
 				logger.Info("Source VM is NOT powered-on yet, continue watching...")
 			}
 
-		case <-time.After(s.Config.WatchTimeout * time.Second):
+		case <-time.After(time.Duration(s.Config.WatchSourceTimeoutSec) * time.Second):
 			return "", fmt.Errorf("timed out watching for source VM object to be ready")
 		}
 	}
