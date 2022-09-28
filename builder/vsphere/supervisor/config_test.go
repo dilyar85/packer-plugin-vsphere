@@ -17,7 +17,7 @@ func getCompleteConfig() map[string]interface{} {
 		"network_type":             "test-networkType",
 		"network_name":             "test-networkName",
 		"watch_source_timeout_sec": 60,
-		"keep_source":              true,
+		"keep_input_artifact":      true,
 	}
 }
 
@@ -105,9 +105,9 @@ func TestSupervisorConfig_Values(t *testing.T) {
 		t.Errorf("expected network_name to be: %s, got: %s", providedConfigs["network_name"], c.NetworkName)
 	}
 	if c.WatchSourceTimeoutSec != providedConfigs["watch_source_timeout_sec"] {
-		t.Errorf("expected watch_source_timeout_sec to be: %d, got: %d", providedConfigs["watch_source_timeout_sec"].(int64), c.WatchSourceTimeoutSec)
+		t.Errorf("expected watch_source_timeout_sec to be: %d, got: %d", providedConfigs["watch_source_timeout_sec"], c.WatchSourceTimeoutSec)
 	}
-	if c.KeepSource != providedConfigs["keep_source"].(bool) {
-		t.Errorf("expected keep_source to be: true, got: false")
+	if c.KeepInputArtifact != providedConfigs["keep_input_artifact"] {
+		t.Errorf("expected keep_input_artifact to be: true, got: false")
 	}
 }

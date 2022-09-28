@@ -96,7 +96,7 @@ func TestCreateSource_Run(t *testing.T) {
 	if err := kubeClient.Get(ctx, objKey, secretObj); err != nil {
 		t.Fatalf("Failed to get the expected Secret object, err: %s", err.Error())
 	}
-	if secretObj == nil || secretObj.StringData["user-data"] == "" {
+	if secretObj.StringData["user-data"] == "" {
 		t.Errorf("Expected the Secret object to be created with user-data, got: %v", secretObj)
 	}
 
@@ -104,9 +104,6 @@ func TestCreateSource_Run(t *testing.T) {
 	vmObj := &vmopv1alpha1.VirtualMachine{}
 	if err := kubeClient.Get(ctx, objKey, vmObj); err != nil {
 		t.Fatalf("Failed to get the expected VM object, err: %s", err.Error())
-	}
-	if vmObj == nil {
-		t.Fatal("VM object is nil")
 	}
 	if vmObj.Name != "test-source" {
 		t.Errorf("Expected VM name to be 'test-vm', got '%s'", vmObj.Name)
@@ -132,9 +129,6 @@ func TestCreateSource_Run(t *testing.T) {
 	vmServiceObj := &vmopv1alpha1.VirtualMachineService{}
 	if err := kubeClient.Get(ctx, objKey, vmServiceObj); err != nil {
 		t.Fatalf("Failed to get the expected VMService object, err: %s", err.Error())
-	}
-	if vmServiceObj == nil {
-		t.Fatal("VMService object is nil")
 	}
 	if vmServiceObj.Name != "test-source" {
 		t.Errorf("Expected VMService name to be 'test-source', got '%s'", vmServiceObj.Name)
@@ -184,9 +178,9 @@ func TestCreateSource_Run(t *testing.T) {
 }
 
 func TestCreateSource_Cleanup(t *testing.T) {
-	// Test when 'keep_source' config is set to true (should skip cleanup).
+	// Test when 'keep_input_artifact' config is set to true (should skip cleanup).
 	config := &supervisor.CreateSourceConfig{
-		KeepSource: true,
+		KeepInputArtifact: true,
 	}
 	step := &supervisor.StepCreateSource{
 		Config: config,
@@ -198,8 +192,8 @@ func TestCreateSource_Cleanup(t *testing.T) {
 	expectedOutput := []string{"Skip cleaning up the source objects as specified in config"}
 	checkOutputLines(t, testWriter, expectedOutput)
 
-	// Test when 'keep_source' config is false (should delete all created source objects).
-	step.Config.KeepSource = false
+	// Test when 'keep_input_artifact' config is false (should delete all created source objects).
+	step.Config.KeepInputArtifact = false
 	step.Config.SourceName = "test-source"
 	step.Namespace = "test-namespace"
 

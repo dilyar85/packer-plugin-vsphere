@@ -40,8 +40,8 @@ type CreateSourceConfig struct {
 	NetworkType string `mapstructure:"network_type"`
 	// Name of the network to attach to the source VM's network interface.
 	NetworkName string `mapstructure:"network_name"`
-	// Keep all created source objects once the builder is done. Defaults to `false`.
-	KeepSource bool `mapstructure:"keep_source"`
+	// Preserve the created objects even after importing them to the vSphere endpoint. Defaults to `false`.
+	KeepInputArtifact bool `mapstructure:"keep_input_artifact"`
 }
 
 func (c *CreateSourceConfig) Prepare() []error {
@@ -112,7 +112,7 @@ func (s *StepCreateSource) Run(ctx context.Context, state multistep.StateBag) mu
 func (s *StepCreateSource) Cleanup(state multistep.StateBag) {
 	logger := state.Get("logger").(*PackerLogger)
 
-	if s.Config.KeepSource {
+	if s.Config.KeepInputArtifact {
 		logger.Info("Skip cleaning up the source objects as specified in config")
 		return
 	}

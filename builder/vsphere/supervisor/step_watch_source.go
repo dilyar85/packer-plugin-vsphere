@@ -50,7 +50,7 @@ type StepWatchSource struct {
 
 func (s *StepWatchSource) Run(ctx context.Context, state multistep.StateBag) multistep.StepAction {
 	logger := state.Get("logger").(*PackerLogger)
-	logger.Info("Waiting for the source VM to be powered-up and accessible...")
+	logger.Info("Waiting for the source VM to be powered-on and accessible...")
 
 	var err error
 	defer func() {
@@ -76,7 +76,7 @@ func (s *StepWatchSource) Run(ctx context.Context, state multistep.StateBag) mul
 	}
 	state.Put(StateKeyCommunicateIP, ingressIP)
 
-	logger.Info("Source VM is now up and ready for customization in Supervisor cluster")
+	logger.Info("Source VM is now ready in Supervisor cluster")
 	return multistep.ActionContinue
 }
 
@@ -150,7 +150,7 @@ func (s *StepWatchSource) waitForVMReady(ctx context.Context, logger *PackerLogg
 
 			vmIP := vmObj.Status.VmIp
 			if vmIP != "" {
-				logger.Info("Successfully get the source VM IP: %s", vmIP)
+				logger.Info("Successfully obtained the source VM IP: %s", vmIP)
 				return vmIP, nil
 			}
 
@@ -188,6 +188,6 @@ func (s *StepWatchSource) getVMIngressIP(ctx context.Context, logger *PackerLogg
 		return "", fmt.Errorf("VMService object's ingress IP is empty")
 	}
 
-	logger.Info("Successfully get the source VM ingress IP: %s", ingress[0].IP)
+	logger.Info("Successfully retrieved the source VM ingress IP: %s", ingress[0].IP)
 	return ingress[0].IP, nil
 }

@@ -50,7 +50,6 @@ func TestConnectSupervisor_Prepare(t *testing.T) {
 	}
 }
 
-// FIXME: This test is failing because of the invalid rest.config created from the test kubeconfig file.
 func TestConnectSupervisor_Run(t *testing.T) {
 	// Set up required config for running the step.
 	testFile := getTestKubeconfigFile(t, "test-ns")

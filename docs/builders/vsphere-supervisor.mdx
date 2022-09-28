@@ -17,7 +17,7 @@ This builder deploys new VMs to a vSphere Supervisor cluster.
 - It uses kubeconfig file to connect to the vSphere Supervisor cluster.
 - It uses the VM-Service API to deploy and configure the source VM.
 - It uses the Packer provisioners to customize the VM after deployment.
-- A new release will be coming soon to publish the customized VM as a new VM image.
+- A new feature will be available soon to publish customized VM as a new VM image to the vSphere endpoint.
 
 ## Examples
 
@@ -28,9 +28,9 @@ Example Packer template:
 
 ```hcl
 source "vsphere-supervisor" "example-vm" {
-  image_name = "centos-stream8-cloudinit-22.1"
-  class_name = "best-effort-large"
-  storage_class = "wcplocal-storage-profile"
+  image_name = "<Image name of the source VM, e.g. 'ubuntu-impish-21.10-cloudimg'>"
+  class_name = "<VM class that describes the virtual hardware settings, e.g. 'best-effort-large'>"
+  storage_class = "<Storage class that provides the backing storage for volume, e.g. 'wcplocal-storage-profile'>"
 }
 
 build {
@@ -46,9 +46,9 @@ build {
   "builders": [
     {
       "type": "vsphere-supervisor",
-      "image_name": "centos-stream8-cloudinit-22.1",
-      "class_name": "best-effort-large",
-      "storage_class": "wcplocal-storage-profile"
+      "image_name": "<Image name of the source VM, e.g. 'ubuntu-impish-21.10-cloudimg'>"
+      "class_name": "<VM class that describes the virtual hardware settings, e.g. 'best-effort-large'>",
+      "storage_class": "<Storage class that provides the backing storage for volume, e.g. 'wcplocal-storage-profile'>"
     }
   ]
 }

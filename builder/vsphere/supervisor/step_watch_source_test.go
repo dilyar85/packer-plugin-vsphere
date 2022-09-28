@@ -115,19 +115,19 @@ func TestWatchSource_Run(t *testing.T) {
 
 		// Check the output lines from the step runs.
 		expectedOutput := []string{
-			"Waiting for the source VM to be powered-up and accessible...",
+			"Waiting for the source VM to be powered-on and accessible...",
 			"Source VM is NOT powered-on yet, continue watching...",
 			"Source VM is powered-on, waiting for an IP to be assigned...",
-			fmt.Sprintf("Successfully get the source VM IP: %s", testVMIP),
+			fmt.Sprintf("Successfully obtained the source VM IP: %s", testVMIP),
 			"Getting source VM ingress IP from the VMService object",
-			fmt.Sprintf("Successfully get the source VM ingress IP: %s", testIngressIP),
-			"Source VM is now up and ready for customization in Supervisor cluster",
+			fmt.Sprintf("Successfully retrieved the source VM ingress IP: %s", testIngressIP),
+			"Source VM is now ready in Supervisor cluster",
 		}
 		checkOutputLines(t, testWriter, expectedOutput)
 	}()
 
 	// Wait for the watch to be established from Builder before updating the fake VM resource below.
-	for i := 0; i < int(step.Config.WatchSourceTimeoutSec); i++ {
+	for i := 0; i < step.Config.WatchSourceTimeoutSec; i++ {
 		supervisor.Mu.Lock()
 		if supervisor.IsWatchingVM {
 			supervisor.Mu.Unlock()
@@ -143,13 +143,13 @@ func TestWatchSource_Run(t *testing.T) {
 	opt := &client.UpdateOptions{}
 
 	vmObj.Status.PowerState = vmopv1alpha1.VirtualMachinePoweredOff
-	kubeClient.Update(ctx, vmObj, opt)
+	_ = kubeClient.Update(ctx, vmObj, opt)
 
 	vmObj.Status.PowerState = vmopv1alpha1.VirtualMachinePoweredOn
-	kubeClient.Update(ctx, vmObj, opt)
+	_ = kubeClient.Update(ctx, vmObj, opt)
 
 	vmObj.Status.VmIp = testVMIP
-	kubeClient.Update(ctx, vmObj, opt)
+	_ = kubeClient.Update(ctx, vmObj, opt)
 
 	wg.Wait()
 }

@@ -33,7 +33,8 @@ func (b *Builder) Run(ctx context.Context, ui packersdk.Ui, hook packersdk.Hook)
 	state.Put("debug", b.config.PackerDebug)
 	state.Put("hook", hook)
 	state.Put("ui", ui)
-	state.Put("logger", &PackerLogger{UI: ui})
+	logger := &PackerLogger{UI: ui}
+	state.Put("logger", logger)
 
 	var steps []multistep.Step
 	steps = append(steps,
@@ -75,5 +76,6 @@ func (b *Builder) Run(ctx context.Context, ui packersdk.Ui, hook packersdk.Hook)
 		return nil, rawErr.(error)
 	}
 
+	logger.Info("Build 'vsphere-supervisor' finished without publishing the VM image (feature not available yet).")
 	return nil, nil
 }
