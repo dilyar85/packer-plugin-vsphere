@@ -63,7 +63,6 @@ func (s *StepWatchSource) Run(ctx context.Context, state multistep.StateBag) mul
 		return multistep.ActionHalt
 	}
 
-	// Wait for the source VM to power up and have an IP assigned.
 	vmIP, err := s.waitForVMReady(ctx, logger)
 	if err != nil {
 		return multistep.ActionHalt

@@ -21,7 +21,7 @@ func getCompleteConfig() map[string]interface{} {
 	}
 }
 
-func getMinimaConfig() map[string]interface{} {
+func getMinimalConfig() map[string]interface{} {
 	return map[string]interface{}{
 		"image_name":    "test-image",
 		"class_name":    "test-class",
@@ -29,11 +29,11 @@ func getMinimaConfig() map[string]interface{} {
 	}
 }
 
-func TestSupervisorConfig_Minimal(t *testing.T) {
+func TestConfig_Minimal(t *testing.T) {
 	c := new(supervisor.Config)
-	minConfigs := getMinimaConfig()
-	// supervisor_namespace is an optional config but it requires a kubeconfig file with valid content.
-	// Adding it here to avoid test failing when executed from an environment without such valid file.
+	minConfigs := getMinimalConfig()
+	// The 'supervisor_namespace' is an optional config but it
+	// requires a valid kubeconfig file to get the default value.
 	minConfigs["supervisor_namespace"] = "test-ns"
 	warns, err := c.Prepare(minConfigs)
 	if len(warns) != 0 {
@@ -44,20 +44,20 @@ func TestSupervisorConfig_Minimal(t *testing.T) {
 	}
 }
 
-func TestSupervisorConfig_Required(t *testing.T) {
+func TestConfig_Required(t *testing.T) {
 	c := new(supervisor.Config)
-	minConfigs := getMinimaConfig()
+	minConfigs := getMinimalConfig()
 	for key, val := range minConfigs {
 		minConfigs[key] = ""
 		_, err := c.Prepare(minConfigs)
 		if err == nil {
-			t.Errorf("expected error for required config: %s", key)
+			t.Errorf("expected an error for the required config: %s", key)
 		}
 		minConfigs[key] = val
 	}
 }
 
-func TestSupervisorConfig_Complete(t *testing.T) {
+func TestConfig_Complete(t *testing.T) {
 	c := new(supervisor.Config)
 	allConfigs := getCompleteConfig()
 	warns, err := c.Prepare(allConfigs)
@@ -69,7 +69,7 @@ func TestSupervisorConfig_Complete(t *testing.T) {
 	}
 }
 
-func TestSupervisorConfig_Values(t *testing.T) {
+func TestConfig_Values(t *testing.T) {
 	c := new(supervisor.Config)
 	providedConfigs := getCompleteConfig()
 	warns, err := c.Prepare(providedConfigs)

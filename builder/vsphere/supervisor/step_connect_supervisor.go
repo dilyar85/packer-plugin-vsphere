@@ -25,12 +25,12 @@ const (
 type ConnectSupervisorConfig struct {
 	// The path to kubeconfig file for accessing to the vSphere Supervisor cluster. Defaults to the value of `KUBECONFIG` envvar or `$HOME/.kube/config` if the envvar is not set.
 	KubeconfigPath string `mapstructure:"kubeconfig_path"`
-	// The Supervisor namespace to deploy the source VM. Defaults to the current context's namespace in kube config.
+	// The Supervisor namespace to deploy the source VM. Defaults to the current context's namespace in kubeconfig.
 	SupervisorNamespace string `mapstructure:"supervisor_namespace"`
 }
 
 func (c *ConnectSupervisorConfig) Prepare() []error {
-	// Set the kubeconfig path from KUBECONFIG env var or the default path if not provided.
+	// Set the kubeconfig path from KUBECONFIG env var or the default home path if not provided.
 	if c.KubeconfigPath == "" {
 		if val := os.Getenv(clientcmd.RecommendedConfigPathEnvVar); val != "" {
 			c.KubeconfigPath = val
@@ -84,7 +84,6 @@ func (s *StepConnectSupervisor) Run(ctx context.Context, state multistep.StateBa
 func (s *StepConnectSupervisor) Cleanup(multistep.StateBag) {}
 
 // Setting this function as a variable so that it can be mocked in test.
-// Either client.Client or client.WithWatch requires a valid kubeconfig to be initialized.
 var InitKubeClientFunc = func(s *StepConnectSupervisor) (client.WithWatch, error) {
 	config, err := clientcmd.BuildConfigFromFlags("", s.Config.KubeconfigPath)
 	if err != nil {
@@ -96,6 +95,6 @@ var InitKubeClientFunc = func(s *StepConnectSupervisor) (client.WithWatch, error
 	_ = corev1.AddToScheme(scheme)
 	_ = vmopv1alpha1.AddToScheme(scheme)
 
-	// Initialize a WithWatch client because we need to watch the status of the source VM.
+	// Initialize a WithWatch client as we need to watch the status of the source VM.
 	return client.NewWithWatch(config, client.Options{Scheme: scheme})
 }

@@ -57,7 +57,6 @@ func (b *Builder) Run(ctx context.Context, ui packersdk.Ui, hook packersdk.Hook)
 		},
 	)
 
-	// Set up SSH connection using the Packer provided communicator.
 	if b.config.CommunicatorConfig.Type != "none" {
 		steps = append(steps,
 			&communicator.StepConnect{

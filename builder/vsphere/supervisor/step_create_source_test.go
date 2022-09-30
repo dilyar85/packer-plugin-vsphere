@@ -46,7 +46,7 @@ func TestCreateSource_Prepare(t *testing.T) {
 		t.Fatalf("Prepare should NOT fail: %v", actualErrs)
 	}
 	if config.SourceName != supervisor.DefaultSourceName {
-		t.Fatalf("Expected default SourceName %s, got %s", supervisor.DefaultSourceName, config.SourceName)
+		t.Errorf("Expected default SourceName %s, got %s", supervisor.DefaultSourceName, config.SourceName)
 	}
 }
 
@@ -168,7 +168,7 @@ func TestCreateSource_Run(t *testing.T) {
 		"Creating required source objects in Supervisor cluster...",
 		"Creating a K8s Secret object for providing source VM metadata",
 		"Successfully created the K8s Secret object",
-		"Creating a VirtualMachine object",
+		"Creating a source VirtualMachine object",
 		"Successfully created the VirtualMachine object",
 		"Creating a VirtualMachineService object for network connection",
 		"Successfully created the VirtualMachineService object",

@@ -8,9 +8,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/hashicorp/packer-plugin-sdk/multistep"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/hashicorp/packer-plugin-sdk/multistep"
 
 	"github.com/hashicorp/packer-plugin-vsphere/builder/vsphere/supervisor"
 )
@@ -25,7 +26,7 @@ func TestConnectSupervisor_Prepare(t *testing.T) {
 		t.Fatalf("Prepare should NOT fail: %v", errs)
 	}
 	if config.KubeconfigPath != "test-path" {
-		t.Errorf("KubeconfigPath should be 'test-path' but got '%s'", config.KubeconfigPath)
+		t.Errorf("config.KubeconfigPath should be 'test-path', but got '%s'", config.KubeconfigPath)
 	}
 
 	// Check kubeconfig path when the KUBECONFIG env var is NOT set.
@@ -35,7 +36,7 @@ func TestConnectSupervisor_Prepare(t *testing.T) {
 		t.Fatalf("Prepare should NOT fail: %s", errs[0])
 	}
 	if config.KubeconfigPath != clientcmd.RecommendedHomeFile {
-		t.Errorf("KubeconfigPath should be '%s', but got '%s'", clientcmd.RecommendedHomeFile, config.KubeconfigPath)
+		t.Errorf("config.KubeconfigPath should be '%s', but got '%s'", clientcmd.RecommendedHomeFile, config.KubeconfigPath)
 	}
 
 	// Check Supervisor namespace from the given kubeconfig file context.
@@ -63,7 +64,7 @@ func TestConnectSupervisor_Run(t *testing.T) {
 	testWriter := new(bytes.Buffer)
 	state := newBasicTestState(testWriter)
 
-	// Mock the InitKubeClientFunc as client.Client or client.WithWatch requires a valid kubeconfig.
+	// Mock the InitKubeClientFunc as controller-client always requires a valid kubeconfig to initialize.
 	originalFunc := supervisor.InitKubeClientFunc
 	defer func() {
 		supervisor.InitKubeClientFunc = originalFunc
@@ -117,7 +118,6 @@ contexts:
 current-context: test-context
 kind: Config
 `
-	// The directory will be automatically removed when the test ends.
 	tmpDir := t.TempDir()
 	fakeFile, err := os.CreateTemp(tmpDir, "fake-test-file")
 	if err != nil {
