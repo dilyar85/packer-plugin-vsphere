@@ -17,7 +17,8 @@ import (
 
 	"github.com/hashicorp/packer-plugin-sdk/multistep"
 	"github.com/pkg/errors"
-	vmopv1alpha1 "github.com/vmware-tanzu/vm-operator-api/api/v1alpha1"
+	vmopv1alpha1 "github.com/vmware-tanzu/vm-operator/api/v1alpha1"
+	imgregv1a1 "gitlab.eng.vmware.com/core-build/image-registry-operator-api/api/v1alpha1"
 )
 
 const (
@@ -98,10 +99,11 @@ var InitKubeClientFunc = func(s *StepConnectSupervisor) (client.WithWatch, error
 		return nil, err
 	}
 
-	// The Supervisor builder will interact with both vmoperator and corev1 resources.
+	// The Supervisor builder will interact with both vmoperator, corev1, and image-registry-operator resources.
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 	_ = vmopv1alpha1.AddToScheme(scheme)
+	_ = imgregv1a1.AddToScheme(scheme)
 
 	// Initialize a WithWatch client as we need to watch the status of the source VM.
 	return client.NewWithWatch(config, client.Options{Scheme: scheme})

@@ -49,6 +49,10 @@ func (b *Builder) Run(ctx context.Context, ui packersdk.Ui, hook packersdk.Hook)
 		&StepConnectSupervisor{
 			Config: &b.config.ConnectSupervisorConfig,
 		},
+		// Validate if VM publish feature is enabled and the required config is valid.
+		&StepValidatePublish{
+			Config: &b.config.ValidatePublishConfig,
+		},
 		// Create a source VM and other related resources in Supervisor cluster.
 		&StepCreateSource{
 			Config:             &b.config.CreateSourceConfig,
@@ -66,6 +70,10 @@ func (b *Builder) Run(ctx context.Context, ui packersdk.Ui, hook packersdk.Hook)
 		},
 		// Run provisioners defined in the Packer template.
 		new(commonsteps.StepProvision),
+		// Publish the source VM to a vSphere content library (if specified).
+		&StepPublishSource{
+			Config: &b.config.PublishSourceConfig,
+		},
 	)
 
 	b.runner = commonsteps.NewRunnerWithPauseFn(steps, b.config.PackerConfig, ui, state)
@@ -75,6 +83,6 @@ func (b *Builder) Run(ctx context.Context, ui packersdk.Ui, hook packersdk.Hook)
 		return nil, rawErr.(error)
 	}
 
-	logger.Info("Build 'vsphere-supervisor' finished without publishing the VM image (feature not available yet).")
+	logger.Info("Build 'vsphere-supervisor' finished.")
 	return nil, nil
 }
