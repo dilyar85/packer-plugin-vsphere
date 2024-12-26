@@ -13,10 +13,11 @@
 - `bootstrap_data_file` (string) - Path to a file with bootstrap configuration data. Required if `bootstrap_provider` is not set to `CloudInit`.
   Defaults to a basic cloud config that sets up the user account from the SSH communicator config.
 
-- `guest_id` (string) - Name of the desired guest operating system identifier for source VM.
+- `guest_os_type` (string) - The guest operating system identifier for the VM.
   Defaults to `otherGuest`.
 
 - `iso_boot_disk_size` (string) - Size of the PVC that will be used as the boot disk when deploying an ISO VM.
+  Supported units are `Gi`, `Mi`, `Ki`, `G`, `M`, `K`, etc.
   Defaults to `20Gi`.
 
 <!-- End of code generated from the comments of the CreateSourceConfig struct in builder/vsphere/supervisor/step_create_source.go; -->

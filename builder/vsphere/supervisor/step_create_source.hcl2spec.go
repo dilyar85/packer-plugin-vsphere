@@ -17,7 +17,7 @@ type FlatCreateSourceConfig struct {
 	KeepInputArtifact *bool   `mapstructure:"keep_input_artifact" cty:"keep_input_artifact" hcl:"keep_input_artifact"`
 	BootstrapProvider *string `mapstructure:"bootstrap_provider" cty:"bootstrap_provider" hcl:"bootstrap_provider"`
 	BootstrapDataFile *string `mapstructure:"bootstrap_data_file" cty:"bootstrap_data_file" hcl:"bootstrap_data_file"`
-	GuestID           *string `mapstructure:"guest_id" cty:"guest_id" hcl:"guest_id"`
+	GuestOSType       *string `mapstructure:"guest_os_type" cty:"guest_os_type" hcl:"guest_os_type"`
 	IsoBootDiskSize   *string `mapstructure:"iso_boot_disk_size" cty:"iso_boot_disk_size" hcl:"iso_boot_disk_size"`
 }
 
@@ -40,7 +40,7 @@ func (*FlatCreateSourceConfig) HCL2Spec() map[string]hcldec.Spec {
 		"keep_input_artifact": &hcldec.AttrSpec{Name: "keep_input_artifact", Type: cty.Bool, Required: false},
 		"bootstrap_provider":  &hcldec.AttrSpec{Name: "bootstrap_provider", Type: cty.String, Required: false},
 		"bootstrap_data_file": &hcldec.AttrSpec{Name: "bootstrap_data_file", Type: cty.String, Required: false},
-		"guest_id":            &hcldec.AttrSpec{Name: "guest_id", Type: cty.String, Required: false},
+		"guest_os_type":       &hcldec.AttrSpec{Name: "guest_os_type", Type: cty.String, Required: false},
 		"iso_boot_disk_size":  &hcldec.AttrSpec{Name: "iso_boot_disk_size", Type: cty.String, Required: false},
 	}
 	return s

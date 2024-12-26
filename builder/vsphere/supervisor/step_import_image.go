@@ -81,7 +81,7 @@ func (c *ImportImageConfig) Prepare() []error {
 	case "":
 		if strings.HasSuffix(c.ImportSourceURL, ".iso") {
 			c.ImportTargetImageType = "iso"
-		} else if strings.HasSuffix(c.ImportSourceURL, ".ovf") {
+		} else if strings.HasSuffix(c.ImportSourceURL, ".ovf") || strings.HasSuffix(c.ImportSourceURL, ".ova") {
 			c.ImportTargetImageType = "ovf"
 		} else {
 			errs = append(errs, fmt.Errorf("cannot infer supported image type from source url %s", c.ImportSourceURL))

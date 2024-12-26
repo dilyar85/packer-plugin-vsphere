@@ -190,11 +190,11 @@ func (s *StepWatchSource) waitForVMReady(ctx context.Context, logger *PackerLogg
 
 				url, err := s.getVMWebConsoleRequestURL(ctx, logger)
 				if err != nil {
-					logger.Error("Failed to generate a web-console URL for ISO VM")
+					logger.Error("Failed to generate a web console URL for ISO VM")
 					return "", err
 				}
 
-				logger.Info("%s", url)
+				logger.Info("Web console URL: %s", url)
 				logger.Info("Use the above URL to complete the guest OS installation.")
 				isoInfoDisplayed = true
 			}
@@ -210,6 +210,9 @@ func (s *StepWatchSource) waitForVMReady(ctx context.Context, logger *PackerLogg
 	}
 }
 
+// getVMWebConsoleRequestURL generates a web console URL for the VM guest OS access.
+// It creates a VirtualMachineWebConsoleRequest object and waits for it to be processed.
+// Once ready, it decrypts the response and returns the URL.
 func (s *StepWatchSource) getVMWebConsoleRequestURL(ctx context.Context, logger *PackerLogger) (string, error) {
 	logger.Info("Generating a web console URL for VM guest OS access...")
 	privateKey, publicKeyPem, err := generateKeyPair()
@@ -234,7 +237,7 @@ func (s *StepWatchSource) getVMWebConsoleRequestURL(ctx context.Context, logger 
 	timedCtx, cancel := context.WithTimeout(ctx, time.Duration(s.Config.WatchSourceTimeoutSec)*time.Second)
 	defer cancel()
 
-	wcr, err = s.waitForWcrStatusChange(timedCtx, logger)
+	wcr, err = s.waitForWCRStatusChange(timedCtx, logger)
 	if err != nil {
 		return "", err
 	}
@@ -242,7 +245,7 @@ func (s *StepWatchSource) getVMWebConsoleRequestURL(ctx context.Context, logger 
 	return s.parseURL(wcr, privateKey)
 }
 
-func (s *StepWatchSource) waitForWcrStatusChange(ctx context.Context, logger *PackerLogger) (*vmopv1.VirtualMachineWebConsoleRequest, error) {
+func (s *StepWatchSource) waitForWCRStatusChange(ctx context.Context, logger *PackerLogger) (*vmopv1.VirtualMachineWebConsoleRequest, error) {
 	watcher, err := s.KubeWatchClient.Watch(ctx, &vmopv1.VirtualMachineWebConsoleRequestList{}, &client.ListOptions{
 		FieldSelector: fields.OneTermEqualSelector("metadata.name", s.SourceName),
 		Namespace:     s.Namespace,
@@ -360,6 +363,7 @@ func (s *StepWatchSource) getVMIngressIP(ctx context.Context, logger *PackerLogg
 	return vmIngressIP, nil
 }
 
+// generateKeyPair generates a new RSA key pair used for the web console URL.
 func generateKeyPair() (*rsa.PrivateKey, []byte, error) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {

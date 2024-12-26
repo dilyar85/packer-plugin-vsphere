@@ -252,7 +252,7 @@ func TestCreateSource_RunDefaultISO(t *testing.T) {
 		StorageClass:    "test-storage-class",
 		SourceName:      "test-source",
 		IsoBootDiskSize: "100Gi",
-		GuestID:         "test-guest-id",
+		GuestOSType:     "test-guest-id",
 	}
 	commConfig := &communicator.Config{
 		Type: "ssh",
@@ -324,8 +324,8 @@ func TestCreateSource_RunDefaultISO(t *testing.T) {
 	if vmObj.Spec.StorageClass != config.StorageClass {
 		t.Errorf("Expected VM storage class to be '%q', got %q", config.StorageClass, vmObj.Spec.StorageClass)
 	}
-	if vmObj.Spec.GuestID != config.GuestID {
-		t.Errorf("Expected VM guest ID to be '%q', got %q", config.GuestID, vmObj.Spec.GuestID)
+	if vmObj.Spec.GuestID != config.GuestOSType {
+		t.Errorf("Expected VM guest ID to be '%q', got %q", config.GuestOSType, vmObj.Spec.GuestID)
 	}
 	// Check if the source VM has the expected volume.
 	if len(vmObj.Spec.Volumes) != 1 {

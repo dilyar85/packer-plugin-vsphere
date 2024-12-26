@@ -201,7 +201,7 @@ func TestWatchSource_RunISO(t *testing.T) {
 		networkConfigLines := strings.Split(string(c), "\n")
 		expectedOutput = append(expectedOutput, networkConfigLines...)
 		expectedOutput = append(expectedOutput, "Generating a web console URL for VM guest OS access...")
-		expectedOutput = append(expectedOutput, "https://test-proxy-addr/vm/web-console?host=1.2.3.4&namespace=test-ns&port=80&ticket=test-ticket&uuid=test-uuid")
+		expectedOutput = append(expectedOutput, "Web console URL: https://test-proxy-addr/vm/web-console?host=1.2.3.4&namespace=test-ns&port=80&ticket=test-ticket&uuid=test-uuid")
 		expectedOutput = append(expectedOutput, "Use the above URL to complete the guest OS installation.")
 		expectedOutput = append(expectedOutput, "Successfully obtained the source VM IP: 1.2.3.4")
 		expectedOutput = append(expectedOutput, "Source VM is now ready in Supervisor cluster")

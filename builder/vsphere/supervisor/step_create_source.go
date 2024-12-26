@@ -61,10 +61,11 @@ type CreateSourceConfig struct {
 	// Path to a file with bootstrap configuration data. Required if `bootstrap_provider` is not set to `CloudInit`.
 	// Defaults to a basic cloud config that sets up the user account from the SSH communicator config.
 	BootstrapDataFile string `mapstructure:"bootstrap_data_file"`
-	// Name of the desired guest operating system identifier for source VM.
+	// The guest operating system identifier for the VM.
 	// Defaults to `otherGuest`.
-	GuestID string `mapstructure:"guest_id"`
+	GuestOSType string `mapstructure:"guest_os_type"`
 	// Size of the PVC that will be used as the boot disk when deploying an ISO VM.
+	// Supported units are `Gi`, `Mi`, `Ki`, `G`, `M`, `K`, etc.
 	// Defaults to `20Gi`.
 	IsoBootDiskSize string `mapstructure:"iso_boot_disk_size"`
 }
@@ -97,12 +98,17 @@ func (c *CreateSourceConfig) Prepare() []error {
 		errs = append(errs, fmt.Errorf("'source_name' must not exceed 15 characters (length: %d): %s", len(c.SourceName), c.SourceName))
 	}
 
-	if c.GuestID == "" {
-		c.GuestID = "otherGuest"
+	if c.GuestOSType == "" {
+		c.GuestOSType = "otherGuest"
 	}
 
 	if c.IsoBootDiskSize == "" {
 		c.IsoBootDiskSize = "20Gi"
+	} else {
+		_, err := resource.ParseQuantity(c.IsoBootDiskSize)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("'iso_boot_disk_size' must be a valid quantity with units: %s", err))
+		}
 	}
 
 	return errs
@@ -358,7 +364,7 @@ func (s *StepCreateSource) createISO(ctx context.Context, logger *PackerLogger, 
 					AllowGuestControl: &[]bool{true}[0],
 				},
 			},
-			GuestID: s.Config.GuestID,
+			GuestID: s.Config.GuestOSType,
 			Volumes: []vmopv1.VirtualMachineVolume{
 				{
 					Name: "vm-boot-disk",
